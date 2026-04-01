@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
-class TaskVectorHarvester:
+class Harvester:
     
     def __init__(self, small_model, large_model, tokenizer, device='cuda'):
         self.small_model = small_model.to(device)
@@ -28,7 +28,7 @@ class TaskVectorHarvester:
             layer_idx (int): Layer to obtain module from in model (obtained via k-means)
         """
         
-        return model.bert.encoder.layer[layer_idx].attention.output.dense
+        return model.encoder.layer[layer_idx].attention.output.dense
     
     def _capture_hook(self, module, input_tensor, output_tensor):
         """Intercepts the activations going in and out of the target layer
@@ -111,7 +111,8 @@ class TaskVectorHarvester:
         
         for i in range(num_layers):
             layer_data = np.vstack(self.cluster_activations[i])
-            kmeans = KMeans(n_clusters=num_layers, random_state=42, n_init=10)
+            ## 2 clusters, Base reps and Task reps
+            kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
             kmeans.fit(layer_data)
             score = silhouette_score(layer_data, true_labels)
             
@@ -136,33 +137,33 @@ class TaskVectorHarvester:
         hook_handle = target_module.register_forward_hook(self._capture_hook)
         
         # Run base prompts for baseline activations
-        self._x_in_cache, self._y_out_cache = [], []
+        self.x_in_cache, self.y_out_cache = [], []
         
         with torch.no_grad():
             for text in base_prompts:
                 inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(self.device)
                 model(**inputs)
-        y_base_out = torch.cat(self._y_out_cache, dim=0).mean(dim=0)
+        y_base_out = torch.cat(self.y_out_cache, dim=0)
         
         # Run Task prompts for task vector calc
         self.x_in_cache, self.y_out_cache = [], []
         
         with torch.no_grad():
             for text in task_prompts:
-                inputs = self.tokenizer(text, return_tensor="pt", padding=True, truncation=True).to(self.device)
+                inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True).to(self.device)
                 model(**inputs)
                 
-        x_task_in = torch.cat(self.x_in_cache, dim=0).mean(dim=0)
-        y_task_out = torch.cat(self.y_out_cache, dim=0).mean(dim=0)
+        x_task_in = torch.cat(self.x_in_cache, dim=0)
+        y_task_out = torch.cat(self.y_out_cache, dim=0)
         
         hook_handle.remove()
         
         ## Forge the LoRA matrices
         v_task = y_task_out - y_base_out
-        norm_sq = torch.dot(x_task_in, x_task_in) + 1e-8
+        norm_sq =torch.sum(x_task_in * x_task_in, dim=1, keepdim=True) + 1e-8
         
-        A = (x_task_in.unsqueeze(0) / norm_sq).cpu()
-        B = v_task.unsqueeze(1).cpu()
+        A = (x_task_in / norm_sq).unsqueeze(1).cpu()
+        B = v_task.unsqueeze(2).cpu()
         
         return A, B
     

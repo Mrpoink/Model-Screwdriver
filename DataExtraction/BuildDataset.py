@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 from typing import List, Tuple, Dict
-from GetModelWeights import TaskVectorHarvester
+from .TaskVectorHarvester import Harvester
 
 class ScrewdriverDataset(Dataset):
     
@@ -21,7 +21,7 @@ class ScrewdriverDataset(Dataset):
         )
         
         
-    def build_dataset(self, task_config:list, harvester:TaskVectorHarvester):
+    def build_dataset(self, task_config:list, harvester:Harvester):
         
         for config in task_config:
             print(f"Harvesting: {config['task_label']}")
