@@ -15,7 +15,7 @@ class ScrewdriverDataset(Dataset):
         item = self.data[idx]
         return (
             item['A_small'], item['B_small'],
-            item['prompt'],
+            item['prompt_emb'],
             item['small_layer'], item['large_layer'],
             item['A_large'], item['B_large']
         )

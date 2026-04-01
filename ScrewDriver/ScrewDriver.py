@@ -73,7 +73,9 @@ class ModelScrewDriver(nn.Module):
         return A_large, B_large, layer_logits
     
     
-    def train(self, dataloader, epochs=50, lr=3e-4, device='cuda'):
+    def calibrate(self, dataloader, epochs=50, lr=3e-4, device='cuda'):
+        
+        self.train()
         
         optimizer = optim.Adam(self.parameters(), lr=lr)
         
@@ -84,6 +86,9 @@ class ModelScrewDriver(nn.Module):
         layer_loss_weight = 0.5
         
         for epoch in range(epochs):
+            total_weight_loss = 0.0
+            total_routing_loss = 0.0
+            
             for batch in dataloader:
                 
                 A_small, B_small, p_emb, s_layer, large_layer_idx, A_target, B_target = [t.to(device) for t in batch]
@@ -104,6 +109,15 @@ class ModelScrewDriver(nn.Module):
                 total_loss = weight_loss + (layer_loss_weight * layer_loss)
                 total_loss.backward()
                 optimizer.step()
+                
+                total_weight_loss += weight_loss.item()
+                total_routing_loss += layer_loss.item()
+                
+            avg_w_loss = total_weight_loss / len(dataloader)
+            avg_r_loss = total_routing_loss / len(dataloader)
+            print(f"Epoch {epoch+1:03d}/{epochs} | ΔW Loss (MSE): {avg_w_loss:.6f} | Routing Loss (CE): {avg_r_loss:.4f}")
+        
+        return self
         
         
     
