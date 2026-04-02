@@ -66,21 +66,19 @@ def main():
     for config in tasks:
         print(f"\n--- Processing Task: {config['task_label']} ---")
         
-        # Find layer to monitor
-        print("Scanning Small Model for optimal layer...")
-        optimal_small = harvester.find_optimal_layer(small_model, config['base_prompts'], config['task_prompts'])
-        print("Scanning Large Model for optimal layer...")
-        optimal_large = harvester.find_optimal_layer(large_model, config['base_prompts'], config['task_prompts'])
         
         # Extract the A and B matrices
-        print(f"Extracting matrices (Small Layer: {optimal_small}, Large Layer: {optimal_large})...")
+        print(f"Extracting matrices...")
         
-        A_small_batch, B_small_batch = harvester.extract_task_matrices(
-            small_model, optimal_small, config['base_prompts'], config['task_prompts']
+        A_small_batch, B_small_batch, optimal_small_layers = harvester.extract_task_matrices(
+            small_model, config['base_prompts'], config['task_prompts'], is_small=True
         )
-        A_large_batch, B_large_batch = harvester.extract_task_matrices(
-            large_model, optimal_large, config['base_prompts'], config['task_prompts']
+        A_large_batch, B_large_batch, optimal_large_layers = harvester.extract_task_matrices(
+            large_model, config['base_prompts'], config['task_prompts']
         )
+        
+        print("Found optimal layers")
+        
         
         # Get the textual task embedding
         prompt_emb = harvester.embed_prompt(config['task_label'])
@@ -92,8 +90,8 @@ def main():
                 'A_small': A_small_batch[i],
                 'B_small': B_small_batch[i],
                 'prompt_emb': prompt_emb, # Constant across all samples for this task
-                'small_layer': torch.tensor(optimal_small, dtype=torch.long),
-                'large_layer': torch.tensor(optimal_large, dtype=torch.long),
+                'small_layer': optimal_small_layers,
+                'large_layer': optimal_large_layers,
                 'A_large': A_large_batch[i],
                 'B_large': B_large_batch[i]
             })

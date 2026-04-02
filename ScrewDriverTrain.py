@@ -22,8 +22,8 @@ def main():
         d_large=1024, 
         rank=1, 
         d_prompt=768,       # Because we used BERT-Base to embed the text
-        num_small_layers=12, 
-        num_large_layers=24
+        num_small_layers=6, 
+        num_large_layers=12
     ).to(device)
     
     trained_screwdriver = screwdriver.calibrate(

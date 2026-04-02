@@ -102,8 +102,8 @@ def main():
     # Step A: Scout the geometry using the small model
     print("1. Scouting prompt geometry with BERT-Base...")
     
-    A_small_batch, B_small_batch = harvester.extract_task_matrices(
-        small_model, small_scout_layer, [baseline_prompt], [user_prompt]
+    A_small_batch, B_small_batch, small_scout_layer = harvester.extract_task_matrices(
+        small_model, [baseline_prompt], [user_prompt]
     )
     
     A_small = A_small_batch[0].unsqueeze(0).to(device)
@@ -112,19 +112,18 @@ def main():
     # Step B: Embed the task context
     prompt_emb = harvester.embed_prompt(task_label).unsqueeze(0).to(device)
     
-    ## TODO: small_scout_layer should ideally be found dynamically via k-means, however, testing
-    s_layer_tensor = torch.tensor([small_scout_layer], dtype=torch.long).to(device)
-    
+   
     # Step C: Forge the weights and predict the layer
     print("2. Forging BERT-Large weights and calculating routing vector...")
     
     with torch.no_grad():
-        A_large, B_large, layer_logits = screwdriver(A_small, B_small, prompt_emb, s_layer_tensor)
+        A_large, B_large, container_logits = screwdriver(A_small, B_small, prompt_emb)
         
-        predicted_layer = torch.argmax(layer_logits, dim=-1).item()
+        predicted_container = torch.argmax(container_logits, dim=-1).item()
+        stride_layers = [i for i in range(24) if i % 2 == predicted_container]
         
-        A_large = A_large.squeeze(0)
-        B_large = B_large.squeeze(0)
+        A_large = A_large.squeeze(0) # Shape: (12, 1, 1024)
+        B_large = B_large.squeeze(0) # Shape: (12, 1024, 1)
         
         # PyTorch linear weights are stored as (out_features, in_features), so we transpose (.T)
         delta_W = (B_large @ A_large).T
@@ -133,12 +132,14 @@ def main():
         # This can be user-set but.... testing
         alpha = 1.0 
         
-        scaled_delta_W = alpha * delta_W
+        delta_W_sequence = torch.matmul(B_large, A_large).transpose(-1, -2)
+        scaled_delta_W = alpha * delta_W_sequence
 
-    print(f"Screwdriver will use {predicted_layer}")
+    print(f"[*] Screwdriver targeting Container: {'Evens' if predicted_container == 0 else 'Odds'}")
 
     # Step D: Physically alter the massive model
-    inject_weights(large_model, predicted_layer, scaled_delta_W)
+    for i, layer_idx in enumerate(stride_layers):
+        inject_weights(large_model, layer_idx, scaled_delta_W[i])
 
     print("\n--- Running Steered Inference ---")
     with torch.no_grad():
@@ -159,7 +160,8 @@ def main():
 
     # Always clean up your weights!
     print("\n--- Cleaning up ---")
-    remove_weights(large_model, predicted_layer, scaled_delta_W)
+    for i, layer_idx in enumerate(stride_layers):
+        remove_weights(large_model, layer_idx, scaled_delta_W[i])
 
 if __name__ == "__main__":
     main()
