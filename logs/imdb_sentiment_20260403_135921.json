@@ -1,0 +1,477 @@
+{
+    "task": "imdb_sentiment",
+    "timestamp": "20260403_135921",
+    "hyperparameters": {
+        "d_small": 768,
+        "d_large": 1024,
+        "d_prompt": 768,
+        "target_rank": 8,
+        "num_small_layers": 12,
+        "num_large_layers": 24,
+        "batch_size": 8,
+        "learning_rate": 0.0003,
+        "epochs": 100,
+        "orthogonality_lambda": 0.1,
+        "beta": 0.25,
+        "healing_rate": 0.3,
+        "alpha_injection": 15.0
+    },
+    "epoch_logs": [
+        {
+            "epoch": 0,
+            "phase": "ROUTER_ONLY",
+            "tau": 5.0,
+            "generator_mse": 0.053912,
+            "router_mse": 0.238291
+        },
+        {
+            "epoch": 1,
+            "phase": "ROUTER_ONLY",
+            "tau": 4.7561,
+            "generator_mse": 0.045324,
+            "router_mse": 0.194408
+        },
+        {
+            "epoch": 2,
+            "phase": "ROUTER_ONLY",
+            "tau": 4.5242,
+            "generator_mse": 0.038376,
+            "router_mse": 0.157819
+        },
+        {
+            "epoch": 3,
+            "phase": "ROUTER_ONLY",
+            "tau": 4.3035,
+            "generator_mse": 0.03179,
+            "router_mse": 0.122748
+        },
+        {
+            "epoch": 4,
+            "phase": "ROUTER_ONLY",
+            "tau": 4.0937,
+            "generator_mse": 0.02607,
+            "router_mse": 0.093045
+        },
+        {
+            "epoch": 5,
+            "phase": "ROUTER_ONLY",
+            "tau": 3.894,
+            "generator_mse": 0.021628,
+            "router_mse": 0.069696
+        },
+        {
+            "epoch": 6,
+            "phase": "ROUTER_ONLY",
+            "tau": 3.7041,
+            "generator_mse": 0.01844,
+            "router_mse": 0.052016
+        },
+        {
+            "epoch": 7,
+            "phase": "ROUTER_ONLY",
+            "tau": 3.5234,
+            "generator_mse": 0.015799,
+            "router_mse": 0.03771
+        },
+        {
+            "epoch": 8,
+            "phase": "ROUTER_ONLY",
+            "tau": 3.3516,
+            "generator_mse": 0.013758,
+            "router_mse": 0.026779
+        },
+        {
+            "epoch": 9,
+            "phase": "ROUTER_ONLY",
+            "tau": 3.1881,
+            "generator_mse": 0.012478,
+            "router_mse": 0.019654
+        },
+        {
+            "epoch": 10,
+            "phase": "ROUTER_ONLY",
+            "tau": 3.0327,
+            "generator_mse": 0.01174,
+            "router_mse": 0.014876
+        },
+        {
+            "epoch": 11,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.8847,
+            "generator_mse": 0.011076,
+            "router_mse": 0.01074
+        },
+        {
+            "epoch": 12,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.7441,
+            "generator_mse": 0.010562,
+            "router_mse": 0.008004
+        },
+        {
+            "epoch": 13,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.6102,
+            "generator_mse": 0.010571,
+            "router_mse": 0.007033
+        },
+        {
+            "epoch": 14,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.4829,
+            "generator_mse": 0.010158,
+            "router_mse": 0.004919
+        },
+        {
+            "epoch": 15,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.3618,
+            "generator_mse": 0.01015,
+            "router_mse": 0.004147
+        },
+        {
+            "epoch": 16,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.2466,
+            "generator_mse": 0.009959,
+            "router_mse": 0.003009
+        },
+        {
+            "epoch": 17,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.1371,
+            "generator_mse": 0.010011,
+            "router_mse": 0.003066
+        },
+        {
+            "epoch": 18,
+            "phase": "ROUTER_ONLY",
+            "tau": 2.0328,
+            "generator_mse": 0.009917,
+            "router_mse": 0.002465
+        },
+        {
+            "epoch": 19,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.9337,
+            "generator_mse": 0.009957,
+            "router_mse": 0.00245
+        },
+        {
+            "epoch": 20,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.8394,
+            "generator_mse": 0.009853,
+            "router_mse": 0.00201
+        },
+        {
+            "epoch": 21,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.7497,
+            "generator_mse": 0.009888,
+            "router_mse": 0.002018
+        },
+        {
+            "epoch": 22,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.6644,
+            "generator_mse": 0.009907,
+            "router_mse": 0.002068
+        },
+        {
+            "epoch": 23,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.5832,
+            "generator_mse": 0.010014,
+            "router_mse": 0.002486
+        },
+        {
+            "epoch": 24,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.506,
+            "generator_mse": 0.009945,
+            "router_mse": 0.0019
+        },
+        {
+            "epoch": 25,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.4325,
+            "generator_mse": 0.009878,
+            "router_mse": 0.001854
+        },
+        {
+            "epoch": 26,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.3627,
+            "generator_mse": 0.00988,
+            "router_mse": 0.001827
+        },
+        {
+            "epoch": 27,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.2962,
+            "generator_mse": 0.010121,
+            "router_mse": 0.002514
+        },
+        {
+            "epoch": 28,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.233,
+            "generator_mse": 0.009934,
+            "router_mse": 0.002132
+        },
+        {
+            "epoch": 29,
+            "phase": "ROUTER_ONLY",
+            "tau": 1.1729,
+            "generator_mse": 0.010058,
+            "router_mse": 0.002229
+        },
+        {
+            "epoch": 30,
+            "phase": "GENERATOR_ONLY",
+            "tau": 1.1157,
+            "generator_mse": 0.000918,
+            "router_mse": 0.00434
+        },
+        {
+            "epoch": 31,
+            "phase": "GENERATOR_ONLY",
+            "tau": 1.0612,
+            "generator_mse": 7.7e-05,
+            "router_mse": 0.002762
+        },
+        {
+            "epoch": 32,
+            "phase": "GENERATOR_ONLY",
+            "tau": 1.0095,
+            "generator_mse": 1.6e-05,
+            "router_mse": 0.002474
+        },
+        {
+            "epoch": 33,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.9602,
+            "generator_mse": 6e-06,
+            "router_mse": 0.002583
+        },
+        {
+            "epoch": 34,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.9134,
+            "generator_mse": 4e-06,
+            "router_mse": 0.00265
+        },
+        {
+            "epoch": 35,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.8689,
+            "generator_mse": 4e-06,
+            "router_mse": 0.002625
+        },
+        {
+            "epoch": 36,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.8265,
+            "generator_mse": 4e-06,
+            "router_mse": 0.002845
+        },
+        {
+            "epoch": 37,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.7862,
+            "generator_mse": 3e-06,
+            "router_mse": 0.002718
+        },
+        {
+            "epoch": 38,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.7478,
+            "generator_mse": 3e-06,
+            "router_mse": 0.002741
+        },
+        {
+            "epoch": 39,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.7114,
+            "generator_mse": 2e-06,
+            "router_mse": 0.002865
+        },
+        {
+            "epoch": 40,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.6767,
+            "generator_mse": 2e-06,
+            "router_mse": 0.002962
+        },
+        {
+            "epoch": 41,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.6437,
+            "generator_mse": 3e-06,
+            "router_mse": 0.002847
+        },
+        {
+            "epoch": 42,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.6123,
+            "generator_mse": 2e-06,
+            "router_mse": 0.002771
+        },
+        {
+            "epoch": 43,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.5824,
+            "generator_mse": 2e-06,
+            "router_mse": 0.002876
+        },
+        {
+            "epoch": 44,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.554,
+            "generator_mse": 2e-06,
+            "router_mse": 0.002761
+        },
+        {
+            "epoch": 45,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.527,
+            "generator_mse": 2e-06,
+            "router_mse": 0.00281
+        },
+        {
+            "epoch": 46,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.5013,
+            "generator_mse": 3e-06,
+            "router_mse": 0.002829
+        },
+        {
+            "epoch": 47,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.4768,
+            "generator_mse": 9e-06,
+            "router_mse": 0.003251
+        },
+        {
+            "epoch": 48,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.4536,
+            "generator_mse": 2e-06,
+            "router_mse": 0.002798
+        },
+        {
+            "epoch": 49,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.4315,
+            "generator_mse": 7e-06,
+            "router_mse": 0.003944
+        },
+        {
+            "epoch": 50,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.4104,
+            "generator_mse": 1.3e-05,
+            "router_mse": 0.003733
+        },
+        {
+            "epoch": 51,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.3904,
+            "generator_mse": 1.2e-05,
+            "router_mse": 0.003681
+        },
+        {
+            "epoch": 52,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.3714,
+            "generator_mse": 7e-06,
+            "router_mse": 0.003347
+        },
+        {
+            "epoch": 53,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.3533,
+            "generator_mse": 4e-06,
+            "router_mse": 0.003152
+        },
+        {
+            "epoch": 54,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.336,
+            "generator_mse": 2.5e-05,
+            "router_mse": 0.005628
+        },
+        {
+            "epoch": 55,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.3196,
+            "generator_mse": 2.1e-05,
+            "router_mse": 0.005299
+        },
+        {
+            "epoch": 56,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.3041,
+            "generator_mse": 2.2e-05,
+            "router_mse": 0.006815
+        },
+        {
+            "epoch": 57,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2892,
+            "generator_mse": 1.6e-05,
+            "router_mse": 0.006487
+        },
+        {
+            "epoch": 58,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2751,
+            "generator_mse": 2.3e-05,
+            "router_mse": 0.009362
+        },
+        {
+            "epoch": 59,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2617,
+            "generator_mse": 2.4e-05,
+            "router_mse": 0.011424
+        },
+        {
+            "epoch": 60,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2489,
+            "generator_mse": 2.9e-05,
+            "router_mse": 0.017101
+        },
+        {
+            "epoch": 61,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2368,
+            "generator_mse": 1.6e-05,
+            "router_mse": 0.028244
+        },
+        {
+            "epoch": 62,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2252,
+            "generator_mse": 4e-06,
+            "router_mse": 0.015837
+        },
+        {
+            "epoch": 63,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2143,
+            "generator_mse": 7e-06,
+            "router_mse": 0.06992
+        },
+        {
+            "epoch": 64,
+            "phase": "GENERATOR_ONLY",
+            "tau": 0.2038,
+            "generator_mse": 2e-06,
+            "router_mse": 0.110547
+        }
+    ],
+    "evaluation_results": {}
+}

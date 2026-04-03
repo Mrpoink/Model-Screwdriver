@@ -1,167 +1,167 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from transformers import BertModel, BertTokenizer
 from DataExtraction.TaskVectorHarvester import Harvester
-from ScrewDriver import ScrewDriver
+from ScrewDriver.ScrewDriver import ModelScrewDriver
 
 def inject_weights(model, layer_idx: int, delta_W: torch.Tensor):
-    """Adds the delta_W weight to the current o_proj attention head in the layer at layer_idx
-
-    Args:
-        model (_type_): model to apply changes
-        layer_idx (int): layer index for change
-        delta_W (torch.Tensor): change in the expected head to steer towards desired output
-    """
     target_module = model.encoder.layer[layer_idx].attention.output.dense
-    
     with torch.no_grad():
         target_module.weight.data.add_(delta_W)
-        
-    print(f"Successfully injected weights into Layer {layer_idx}.")
-
-
 
 def remove_weights(model, layer_idx: int, delta_W: torch.Tensor):
-    """Removes delta_W weight change from current o_proj attention head at layer_idx to prevent oversteering
-
-    Args:
-        model (_type_): model to apply change to
-        layer_idx (int): layer index for change
-        delta_W (torch.Tensor): change in the expected head to steer towards desired output
-    """
     target_module = model.encoder.layer[layer_idx].attention.output.dense
-    
     with torch.no_grad():
         target_module.weight.data.sub_(delta_W)
-        
-    print(f"[*] Successfully REMOVED weights from Layer {layer_idx}.")
 
-
-def main():
-    
+def evaluate_screwdriver():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
     
     print("Loading Base Models and Tokenizer...")
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    
-    
-    small_model = BertModel.from_pretrained('bert-base-uncased').to(device)
-    small_model.eval()
-    large_model = BertModel.from_pretrained('bert-large-uncased').to(device)
-    large_model.eval()
-    
+    small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
+    large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
     
     harvester = Harvester(small_model, large_model, tokenizer, device=device)
     
-    print("Loading Trained Screwdriver...")
-    screwdriver = ScrewDriver.ModelScrewDriver(
-        d_small=768, 
-        d_large=1024, 
-        rank=1, 
-        d_prompt=768, 
-        num_small_layers=12, 
-        num_large_layers=24
+    print("Loading Trained Screwdriver Engine...")
+    screwdriver = ModelScrewDriver(
+        d_small=768, d_large=1024, rank=1, d_prompt=768, 
+        num_small_layers=12, num_large_layers=24
     ).to(device)
     
-    ## WARNING: THIS ASSUMES THAT YOU ARE USING THE FRESHLY MADE DATASET. weights_only IS A SECURITY CHECK MADE BY PYTORCH!!
     screwdriver.load_state_dict(torch.load("ModelScrewdriver.pth", weights_only=True))
     screwdriver.eval()
 
-    
-    # The task we trained the Screwdriver on
+    # --- EVALUATION DATA ---
     task_label = "Analyze the sentiment of this text."
-    
-    # The live user prompt we want to steer
-    user_prompt = "The pacing of the second act was completely unbearable."
-    
-    # We use a neutral baseline to calculate the live shift
     baseline_prompt = "The movie had a second act."
     
-    # We know from our radar during dataset creation that small model layer 6 handles sentiment
-    ## TODO: THIS MUST BE DYNAMIC!!
-    small_scout_layer = 6 
-    
-    print(f"\n[User Input]: '{user_prompt}'")
+    # Prompts the model has NEVER seen during training
+    test_prompts = [
+        "The pacing of the second act was completely unbearable.",
+        "I absolutely loved the character development in this film.",
+        "It was an okay experience, nothing special.",
+        "The cinematography was breathtaking, but the plot was dull.",
+        "Worst two hours of my life, completely unwatchable."
+    ]
 
-    print("\n--- Running Unsteered Baseline ---")
-    
-    inputs = tokenizer(user_prompt, return_tensors="pt").to(device)
-    
-    with torch.no_grad():
-        
-        base_outputs = large_model(**inputs)
-        base_thought = base_outputs.pooler_output 
-        ## TODO: HAVE THIS PRINT
-
-
-    print("\n--- Engaging Screwdriver ---")
-    
-    
-    # Step A: Scout the geometry using the small model
-    print("1. Scouting prompt geometry with BERT-Base...")
-    
-    A_small_batch, B_small_batch, small_scout_layer = harvester.extract_task_matrices(
-        small_model, [baseline_prompt], [user_prompt]
-    )
-    
-    A_small = A_small_batch[0].unsqueeze(0).to(device)
-    B_small = B_small_batch[0].unsqueeze(0).to(device)
-    
-    # Step B: Embed the task context
     prompt_emb = harvester.embed_prompt(task_label).unsqueeze(0).to(device)
     
-   
-    # Step C: Forge the weights and predict the layer
-    print("2. Forging BERT-Large weights and calculating routing vector...")
+    # --- METRICS TRACKERS ---
+    total_shift = 0.0
+    total_layers_altered = 0
+    
+    # Physical Constants for Alpha Decay
+    beta = 0.5
+    healing_rate = 0.3
+
+    print("\n--- Commencing Evaluation ---")
+    
+    print("Calibrating Concept Axis...")
+    # Define pure anchors for the concept
+    pos_anchor = "The pacing of the movie was wonderful and I loved it."
+    neg_anchor = "The pacing of the movie was terrible and I hated it."
     
     with torch.no_grad():
-        A_large, B_large, container_logits = screwdriver(A_small, B_small, prompt_emb)
+        pos_inputs = tokenizer(pos_anchor, return_tensors="pt").to(device)
+        neg_inputs = tokenizer(neg_anchor, return_tensors="pt").to(device)
         
-        predicted_container = torch.argmax(container_logits, dim=-1).item()
-        stride_layers = [i for i in range(24) if i % 2 == predicted_container]
+        pos_thought = large_model(**pos_inputs).pooler_output
+        neg_thought = large_model(**neg_inputs).pooler_output
         
-        A_large = A_large.squeeze(0) # Shape: (12, 1, 1024)
-        B_large = B_large.squeeze(0) # Shape: (12, 1024, 1)
-        
-        # PyTorch linear weights are stored as (out_features, in_features), so we transpose (.T)
-        delta_W = (B_large @ A_large).T
-        
-        # Alpha controls the "strength" of the steering. 1.0 is standard.
-        # This can be user-set but.... testing
-        alpha = 1.0 
-        
-        delta_W_sequence = torch.matmul(B_large, A_large).transpose(-1, -2)
-        scaled_delta_W = alpha * delta_W_sequence
-
-    print(f"[*] Screwdriver targeting Container: {'Evens' if predicted_container == 0 else 'Odds'}")
-
-    # Step D: Physically alter the massive model
-    for i, layer_idx in enumerate(stride_layers):
-        inject_weights(large_model, layer_idx, scaled_delta_W[i])
-
-    print("\n--- Running Steered Inference ---")
-    with torch.no_grad():
-        steered_outputs = large_model(**inputs)
-        steered_thought = steered_outputs.pooler_output
-
-    # We calculate the Euclidean distance between the base thought and the steered thought
-    # to prove the model's internal representation was actually altered by our injection.
-    # This is done for testing and verification purposes
-    shift_magnitude = torch.norm(steered_thought - base_thought).item()
+        # Create the directional vector for "Positive Sentiment"
+        concept_axis = (pos_thought - neg_thought).squeeze(0)
     
-    print(f"\n[Verification] Structural shift detected in final representation: {shift_magnitude:.4f}")
-    
-    if shift_magnitude > 0.0:
-        print("[*] SUCCESS: The Screwdriver successfully seized and altered the model's latent manifold.")
-    else:
-        print("[!] FAILURE: The model's output did not change.")
+    for idx, user_prompt in enumerate(test_prompts):
+        print(f"\n[Test {idx+1}/{len(test_prompts)}] Prompt: '{user_prompt}'")
+        
+        # 1. Unsteered Baseline
+        inputs = tokenizer(user_prompt, return_tensors="pt").to(device)
+        with torch.no_grad():
+            base_thought = large_model(**inputs).pooler_output
+            
+        # 2. Scout Matrix Extraction (The Radar)
+        A_small_batch, B_small_batch, _ = harvester.extract_task_matrices(
+            small_model, [baseline_prompt], [user_prompt], is_small=True
+        )
+        A_small = A_small_batch[0].unsqueeze(0).to(device)
+        B_small = B_small_batch[0].unsqueeze(0).to(device)
+        
+        # 3. Screwdriver Generation (The Forge & Brain)
+        with torch.no_grad():
+            # hard=True forces the STE to output strict 1s and 0s
+            A_large, B_large, gate = screwdriver(A_small, B_small, prompt_emb, hard=True)
+            
+            # Identify which layers the Router chose to open
+            # gate shape: (Batch, 24). We squeeze to 1D.
+            active_layers = torch.where(gate.squeeze() > 0.5)[0].tolist()
+            
+            A_large = A_large.squeeze(0) 
+            B_large = B_large.squeeze(0) 
+            
+            # Generate the matrices: (24, 1024, 1024)
+            delta_W_sequence = torch.matmul(B_large, A_large).transpose(-1, -2)
 
-    # Always clean up your weights!
-    print("\n--- Cleaning up ---")
-    for i, layer_idx in enumerate(stride_layers):
-        remove_weights(large_model, layer_idx, scaled_delta_W[i])
+        total_layers_altered += len(active_layers)
+        print(f"  [*] Router selected {len(active_layers)} layers: {active_layers}")
+
+        # 4. Surgical Injection with Exponential Recovery Decay
+        previous_layer = -999
+        injected_weights = [] # Keep track so we can clean up exactly what we injected
+        
+        for layer_idx in active_layers:
+            distance = layer_idx - previous_layer
+            
+            if distance > 100:
+                alpha = 1.0 
+            else:
+                alpha = 1.0 - (beta * torch.exp(torch.tensor(-healing_rate * (distance - 1)))).item()
+                
+            scaled_delta_W = alpha * delta_W_sequence[layer_idx]
+            
+            inject_weights(large_model, layer_idx, scaled_delta_W)
+            injected_weights.append((layer_idx, scaled_delta_W))
+            previous_layer = layer_idx
+
+        # 5. Steered Inference
+        with torch.no_grad():
+            steered_thought = large_model(**inputs).pooler_output
+
+        # --- CALCULATE ACCURACY (DIRECTIONAL SHIFT) ---
+        # 1. How aligned was the original thought with positive sentiment?
+        base_alignment = F.cosine_similarity(base_thought.squeeze(0), concept_axis, dim=0).item()
+        
+        # 2. How aligned is the steered thought with positive sentiment?
+        steered_alignment = F.cosine_similarity(steered_thought.squeeze(0), concept_axis, dim=0).item()
+        
+        # 3. The absolute improvement toward the target concept
+        accuracy_shift = steered_alignment - base_alignment
+        
+        print(f"  [*] Baseline Alignment: {base_alignment:.4f}")
+        print(f"  [*] Steered Alignment:  {steered_alignment:.4f}")
+        
+        if accuracy_shift > 0:
+            print(f"  [+] SUCCESS: Moved {accuracy_shift:.4f} units TOWARD the target concept.")
+        else:
+            print(f"  [-] FAILURE: Moved {abs(accuracy_shift):.4f} units AWAY from the target concept.")
+        
+        # 6. Calculate Shift
+        shift_magnitude = torch.norm(steered_thought - base_thought).item()
+        total_shift += shift_magnitude
+        print(f"  [*] Manifold Shift (L2 Norm): {shift_magnitude:.4f}")
+
+        # 7. Cleanup
+        for layer_idx, weight in injected_weights:
+            remove_weights(large_model, layer_idx, weight)
+
+    # --- FINAL REPORT ---
+    print("\n" + "="*40)
+    print("      EVALUATION SUMMARY")
+    print("="*40)
+    print(f"Average Manifold Shift:  {total_shift / len(test_prompts):.4f}")
+    print(f"Average Layers Altered:  {total_layers_altered / len(test_prompts):.1f} / 24")
+    print("="*40)
 
 if __name__ == "__main__":
-    main()
+    evaluate_screwdriver()

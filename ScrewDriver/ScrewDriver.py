@@ -7,18 +7,18 @@ torch.manual_seed(1068)
 
 class ModelScrewDriver(nn.Module):
     
-    def __init__(self, d_small:int, d_large:int, rank:int, d_prompt:int, 
-                 num_small_layers:int = 6, num_large_layers:int = 12):
+    def __init__(self, d_small: int, d_large: int, target_rank: int, d_prompt: int, 
+                 num_small_layers: int = 12, num_large_layers: int = 24):
         super().__init__()
         
         
         self.d_large = d_large
-        self.rank = rank
+        self.target_rank = target_rank
         self.num_large_layers = num_large_layers
         
         # 1. The Intake Manifold (Flattened sequence dimensions)
         # We multiply by the number of matrices in the stride
-        dim_t_small = 12 * 2 * (rank * d_small)
+        dim_t_small = num_small_layers * 2 * (1 * d_small)
         
         
         self.compress_small_task = nn.Linear(dim_t_small, 1024)
@@ -26,17 +26,27 @@ class ModelScrewDriver(nn.Module):
         
         fused_dim = 1024 + 512
         
-        dim_t_large_A = num_large_layers * (rank * d_large)
-        dim_t_large_B = num_large_layers * (d_large * rank)
+        # 2. The MoE Router
+        # Outputs exactly 24 logits representing the confidence for each large model layer
+        self.predict_confidence = nn.Linear(fused_dim, num_large_layers)
         
-        self.generate_A_large = nn.Linear(fused_dim, dim_t_large_A)
-        self.generate_B_large = nn.Linear(fused_dim, dim_t_large_B)
+        # 3. Layer Identity Embedding
+        # Tells the Shared Generator WHICH of the 24 layers it is currently forging
+        self.layer_embedding = nn.Embedding(num_large_layers, 256)
         
-        self.predict_container = nn.Linear(fused_dim, 2)
+        # Tells the generator WHICH slice of the rank it's forging
+        self.chunk_embedding = nn.Embedding(target_rank, 64)
+        
+        # 4. The SHARED Generators (The Forge)
+        # It only generates ONE matrix at a time.
+        generator_input_dim = fused_dim + 256 + 64
+        
+        self.generate_A_shared = nn.Linear(generator_input_dim, 1 * d_large)
+        self.generate_B_shared = nn.Linear(generator_input_dim, d_large * 1)
         
         
-    def forward(self, A_small:torch.tensor, B_small:torch.tensor, 
-                prompt_emb:torch.tensor):
+    def forward(self, A_small: torch.Tensor, B_small: torch.Tensor,
+                prompt_emb: torch.Tensor, tau=1.0, hard=True):
         
         batch_size = prompt_emb.shape[0] ## layer depth
         
@@ -51,70 +61,75 @@ class ModelScrewDriver(nn.Module):
         
         
         # Fuse context
+        # Shape: (Batch, 1536)
         fused_context = torch.cat([t_small_features, prompt_features], dim=-1)
         
-        # Generate flat output matrices
-        flat_A_large = self.generate_A_large(fused_context)
-        flat_B_large = self.generate_B_large(fused_context)
+        #Shape: (Batch, 24)
+        logits = self.predict_confidence(fused_context)
         
-        # Reshape into 3D LoRA matrices
-        # Shape becomes: (Batch, 12, 1, 1024) and (Batch, 12, 1024, 1)
-        A_large = flat_A_large.view(batch_size, self.num_large_layers, self.rank, self.d_large)
-        B_large = flat_B_large.view(batch_size, self.num_large_layers, self.d_large, self.rank)
+        if self.training:
+            # Add uniform noise, transform to Gumbel noise to allow exploration
+            U = torch.rand_like(logits)
+            gumbel_noise = -torch.log(-torch.log(U + 1e-8) + 1e-8)
+            noisy_logits = (logits + gumbel_noise) / tau ## We will need a better way to do tau, right now it is hardcoded
+            y_soft = torch.sigmoid(noisy_logits)
+        else:
+            # Live Steer bypasses the noise
+            y_soft = torch.sigmoid(logits)
         
-        container_logits = self.predict_container(fused_context)
+        if hard:
+            # Straight-Through Estimator (STE): Forces a hard 1 or 0 to save compute
+            y_hard = (y_soft > 0.5).float()
+            # The Magic: y_hard goes forward (zeroing out tensors), y_soft gradients go backward
+            gate = (y_hard - y_soft).detach() + y_soft
+        else:
+            # During Router training, we want the smooth probabilities
+            gate = y_soft
         
-        return A_large, B_large, container_logits
-    
-    
-    def calibrate(self, dataloader, epochs=50, lr=3e-4, device='cuda'):
+        A_large_list = []
+        B_large_list = []
         
-        self.train()
-        
-        optimizer = optim.Adam(self.parameters(), lr=lr)
-        
-        mse_loss_fn = nn.MSELoss() ## Matrix Generators
-        ce_loss_fn = nn.CrossEntropyLoss() ## Layer prediction
-        
-        # Balance losses to prevent one overcoming another
-        layer_loss_weight = 0.5
-        
-        for epoch in range(epochs):
-            total_weight_loss = 0.0
-            total_routing_loss = 0.0
+        for i in range(self.num_large_layers):
             
-            for batch in dataloader:
+            # Tell the network which layer it is currently looking at
+            layer_idx = torch.full((batch_size,), i, dtype=torch.long, device=prompt_emb.device)
+            l_emb = self.layer_embedding(layer_idx)
+            
+            A_chunks = []
+            B_chunks = []
+            
+            for c in range(self.target_rank):
+                chunk_idx = torch.full((batch_size,), c, dtype=torch.long, device=prompt_emb.device)
+                c_emb = self.chunk_embedding(chunk_idx)
                 
-                A_small, B_small, p_emb, s_layers, large_layers, A_target, B_target = [t.to(device) for t in batch]
+                gen_input = torch.cat([fused_context, l_emb, c_emb], dim=-1)
                 
-                optimizer.zero_grad()
+                # Generate Rank-1 slices
+                A_c = self.generate_A_shared(gen_input).view(batch_size, 1, 1, self.d_large)
+                B_c = self.generate_B_shared(gen_input).view(batch_size, 1, self.d_large, 1)
                 
-                # Forward
-                A_pred, B_pred, layer_logits = self.forward(A_small, B_small, p_emb)
-                
-                # Calculate weight loss (mse)
-                T_pred = torch.matmul(B_pred, A_pred)
-                T_target = torch.matmul(B_target, A_target)
-                weight_loss = mse_loss_fn(T_pred, T_target)
-                
-                container_labels = (large_layers[:, 0] % 2 != 0).long()
-                
-                # Layer Prediction loss
-                layer_loss = ce_loss_fn(layer_logits, container_labels)
-                
-                total_loss = weight_loss + (layer_loss_weight * layer_loss)
-                total_loss.backward()
-                optimizer.step()
-                
-                total_weight_loss += weight_loss.item()
-                total_routing_loss += layer_loss.item()
-                
-            avg_w_loss = total_weight_loss / len(dataloader)
-            avg_r_loss = total_routing_loss / len(dataloader)
-            print(f"Epoch {epoch+1:03d}/{epochs} | ΔW Loss (MSE): {avg_w_loss:.6f} | Routing Loss (CE): {avg_r_loss:.4f}")
+                A_chunks.append(A_c)
+                B_chunks.append(B_c)
+            
+            # Stack the slices along the Rank dimension to create the high-rank matrix
+            # A_i shape becomes: (Batch, 1, target_rank, 1024)
+            A_i = torch.cat(A_chunks, dim=2)
+            # B_i shape becomes: (Batch, 1, 1024, target_rank)
+            B_i = torch.cat(B_chunks, dim=3)
+            
+            # Apply the Router Gate
+            A_gated = A_i * gate[:, i].view(batch_size, 1, 1, 1)
+            
+            A_large_list.append(A_gated)
+            B_large_list.append(B_i)
         
-        return self
+        A_large = torch.cat(A_large_list, dim=1)
+        B_large = torch.cat(B_large_list, dim=1)
+        
+        return A_large, B_large, gate
     
+    
+
     # def small_model_info(self, prompt)
         
         
