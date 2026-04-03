@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from ScrewDriver.ScrewDriver import ModelScrewDriver
+from StartDatasetBuild import main as buildDataset
 
 class ScrewdriverTrainer:
     def __init__(self, model, dataloader, device, lr=5e-5):
@@ -131,17 +132,17 @@ class ScrewdriverTrainer:
             
         return total_w_loss / len(self.dataloader), total_r_loss / len(self.dataloader)
 
-    def execute_curriculum(self, total_epochs=200):
+    def execute_curriculum(self, total_epochs=350):
         print("\n--- Initiating Two-Phase Curriculum Calibration ---")
         self.model.train()
         
         for epoch in range(total_epochs):
             tau = max(0.1, 5.0 * math.exp(-0.05 * epoch))
             
-            if epoch < 120:
+            if epoch < 150:
                 phase = "ROUTER_ONLY"
                 avg_w, avg_r = self._train_router_epoch(tau)
-            elif epoch < 130:
+            elif epoch < 250:
                 phase = "GENERATOR_ONLY"
                 avg_w, avg_r = self._train_generator_epoch(tau)
             else:
@@ -151,13 +152,15 @@ class ScrewdriverTrainer:
             print(f"Epoch {epoch:03d} | Phase: {phase:<14} | Generator Loss (MSE): {avg_w:.6f} | Router Loss (KL): {avg_r:.6f}")
 
 
-def main():
+def main(lr=5e-5):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     print("Loading training data...")
+    
+    buildDataset()
     dataset = torch.load("screwdriver_training_data.pt", weights_only=False)
     dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
-    
+
     print("Initializing Screwdriver Engine....")
     screwdriver = ModelScrewDriver(
         d_small=768, 
@@ -169,10 +172,10 @@ def main():
     ).to(device)
     
     # Initialize the Trainer Class
-    trainer = ScrewdriverTrainer(screwdriver, dataloader, device)
+    trainer = ScrewdriverTrainer(screwdriver, dataloader, device, lr=lr)
     
     # Run the modular training loops
-    trainer.execute_curriculum(total_epochs=200)
+    trainer.execute_curriculum()
     
     torch.save(screwdriver.state_dict(), "ModelScrewdriver.pth")
     print("\n[*] Successfully trained, calibrated, and saved ModelScrewdriver.pth")

@@ -49,9 +49,10 @@ def main():
         "screwdriver_weights": "ModelScrewdriver.pth",
         "eval_samples": 1000,
         "target_rank": 8,
-        "beta": 0.25,
+        "beta": 0.3,
         "healing_rate": 0.3,
-        "alpha_injection": 1.0 # Tune this based on your Rank-8 stability
+        "alpha_injection": 3.0, # Tune this based on your Rank-8 stability
+        "learning_rate" : 5e-5
     }
 
     print("Loading Base Models and Tokenizer...")
@@ -67,15 +68,10 @@ def main():
         target_rank=config['target_rank'], num_small_layers=12, num_large_layers=24
     ).to(device)
     
-    # Load your existing trained model. We are NOT retraining.
-    try:
-        screwdriver.load_state_dict(torch.load(config['screwdriver_weights'], weights_only=True))
-        screwdriver.eval()
-        
-    except FileNotFoundError:
-        Screwdrivertrain()
-        screwdriver.load_state_dict(torch.load(config['screwdriver_weights'], weights_only=True))
-        screwdriver.eval()
+    
+    Screwdrivertrain(config["learning_rate"])
+    screwdriver.load_state_dict(torch.load(config['screwdriver_weights'], weights_only=True))
+    screwdriver.eval()
 
    # 2. LOAD UNSEEN EVALUATION DATA
     print(f"Loading {config['eval_samples']} evaluation samples from {config['task_name']}...")
@@ -180,4 +176,6 @@ def main():
     log_evaluation(config, metrics)
 
 if __name__ == "__main__":
-    main()
+    for i in range(20):
+        main()
+        torch.cuda.empty_cache()
