@@ -57,18 +57,20 @@ class Harvester:
             
             ## Cache the ENTIRE sequence, not just [CLS], for perfect restoration
             ## Shape: (Batch_Size, Seq_Len, d_hidden)
-            self.clean_activations[layer_idx] = y_raw.detach()
+            self.clean_activations[layer_idx] = y_raw.detach().cpu()
         return _hook
         
     def _patch_hook_factory(self, layer_idx: int):
         """Physically replaces corrupted layer output with the perfect cached output."""
         def _hook(module, input_tensor, output_tensor):
             
+            clean_tensor = self.clean_activations[layer_idx].to(self.device)
+            
             ## Causal Tracing: Inject the clean cache back into the residual stream
             if isinstance(output_tensor, tuple):
-                return (self.clean_activations[layer_idx],) + output_tensor[1:]
+                return (clean_tensor,) + output_tensor[1:]
             
-            return self.clean_activations[layer_idx]
+            return clean_tensor
         return _hook
 
     def causal_trace_variance(self, model, task_prompts: list) -> torch.Tensor:
@@ -92,7 +94,9 @@ class Harvester:
         print("      [*] Engaging Causal Tracer (Noise Injection & Restoration)...")
         num_layers = model.config.num_hidden_layers
         
-        inputs = self.tokenizer(task_prompts, return_tensors="pt", padding=True, truncation=True).to(self.device)
+        subset_prompts = task_prompts[:32]
+        
+        inputs = self.tokenizer(subset_prompts, return_tensors="pt", padding=True, truncation=True).to(self.device)
         
         ## 1. Clean Run: Cache the perfect, uncorrupted hidden states
         self.clean_activations = {}
@@ -181,11 +185,15 @@ class Harvester:
         for i in range(num_layers):
             module = self._get_target_module(model, i)
             radar_hooks.append(module.register_forward_hook(self._hook_factory(i)))
-            
+        
+        batch_size = 32
+        
         with torch.no_grad():
             for prompts in [base_prompts, task_prompts]:
-                inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(self.device)
-                model(**inputs)
+                for i in range(0, len(prompts), batch_size):
+                    batch = prompts[i : i + batch_size]
+                    inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(self.device)
+                    model(**inputs)
                 
         for hook in radar_hooks: hook.remove()
         
