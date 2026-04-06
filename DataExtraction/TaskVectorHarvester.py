@@ -311,3 +311,37 @@ class Harvester:
             sentence_emb = outputs.pooler_output.squeeze(0).cpu()
             
         return sentence_emb
+    
+    def extract_task_space_matrices(self, model, neutral_prompt, active_prompt, text_sample):
+        """
+        Finds the exact matrix shift required to move from 'Neutral' to 'Task-Active'.
+        """
+        # This calls your existing extraction logic but uses a contrastive pair
+        # instead of a singular prompt.
+        A_large, B_large, _ = self.extract_task_matrices(
+            model, 
+            [f"{neutral_prompt} {text_sample}"], 
+            [f"{active_prompt} {text_sample}"], 
+            is_small=False, 
+            calc_variance=False
+        )
+        return A_large[0], B_large[0]
+    
+    def extract_task_space_target(self, model, neutral_text, task_text):
+        """
+        Finds the manifold shift between a 'boring' sentence and a 'task-heavy' sentence.
+        """
+        with torch.no_grad():
+            # Encode both states
+            inputs_neutral = self.tokenizer(neutral_text, return_tensors="pt").to(self.device)
+            inputs_task = self.tokenizer(task_text, return_tensors="pt").to(self.device)
+            
+            # Get the 'Golden' activations from the Large Model
+            out_neutral = model(**inputs_neutral).pooler_output # 'Boring' BERT
+            out_task = model(**inputs_task).pooler_output       # 'Thinking' BERT
+            
+            # The Target is the 'Cognitive Shift' required to care about the task
+            task_vector = (out_task - out_neutral).squeeze(0)
+            
+            # Normalize to keep gradients stable on your 5060
+            return task_vector / (torch.norm(task_vector) + 1e-8)

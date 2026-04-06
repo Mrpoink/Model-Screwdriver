@@ -34,7 +34,7 @@ class ModelScrewDriver(nn.Module):
         # 2. The MoE Router
         # Outputs exactly 24 logits representing the confidence for each large model layer
         
-        router_input_dim = (d_small * 2) + 64
+        router_input_dim = (d_small * 6) + 64
         
         self.predict_confidence = nn.Sequential(
             nn.Linear(router_input_dim, 512),
@@ -118,14 +118,17 @@ class ModelScrewDriver(nn.Module):
         # --- NEW ROUTER INPUT PIPELINE ---
         # 1. Pool the small matrices to get a clean summary of the sentence
         # A_small shape: (Batch, 12, 1, 768) -> mean across layers -> (Batch, 768)
-        A_pooled = A_small.mean(dim=1).squeeze(1) 
-        B_pooled = B_small.mean(dim=1).squeeze(2) 
-        sentence_features = torch.cat([A_pooled, B_pooled], dim=-1) # Shape: (Batch, 1536)
-        
+        A_mean, A_std, A_max = A_small.mean(dim=1).squeeze(1), A_small.std(dim=1).squeeze(1), A_small.max(dim=1)[0].squeeze(1)
+        B_mean, B_std, B_max = B_small.mean(dim=1).squeeze(2), B_small.std(dim=1).squeeze(2), B_small.max(dim=1)[0].squeeze(2)
+
+        # 2. Build Router Input
+        sentence_features = torch.cat([A_mean, A_std, A_max, B_mean, B_std, B_max], dim=-1)
         router_prompt = self.router_prompt_compressor(prompt_emb)
-        # 3. Fuse and predict
-        router_input = torch.cat([sentence_features, router_prompt], dim=-1) # Shape: (Batch, 1600)
+        router_input = torch.cat([sentence_features, router_prompt], dim=-1) # Shape: (Batch, 4672)
+
+        # 3. Predict Gates
         logits = self.predict_confidence(router_input)
+        gate = F.gumbel_softmax(logits, tau=tau, hard=hard, dim=-1)
         
         if self.training:
             # Add uniform noise, transform to Gumbel noise to allow exploration

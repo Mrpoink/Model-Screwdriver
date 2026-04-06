@@ -7,14 +7,7 @@ from DataExtraction import TaskVectorHarvester, BuildDataset
 from ScrewDriver.Tools import inject_weights, remove_weights
 
 def prepare_imdb_data(sample_size_per_class=100) -> list:
-    """Returns clean and filtered imdb dataset for task evaluation
-
-    Args:
-        sample_size_per_class (int, optional): Amount of points for each binary category. Defaults to 100.
-
-    Returns:
-        list: imdb dataset variation
-    """
+    """Returns clean and filtered imdb dataset for task evaluation"""
     print("Downloading/Loading IMDB Dataset from HuggingFace...")
     dataset = load_dataset("imdb", split="train")
     
@@ -36,7 +29,6 @@ def prepare_agnews_data(sample_size_per_class=100) -> list:
     print("Downloading/Loading AG News Dataset from HuggingFace...")
     dataset = load_dataset("ag_news", split="train")
     
-    # Label 0 is World News, Label 1 is Sports. Highly distinct concepts.
     world_news = [row['text'] for row in dataset if row['label'] == 0]
     sports_news = [row['text'] for row in dataset if row['label'] == 1]
     
@@ -54,7 +46,6 @@ def prepare_sst2_data(sample_size_per_class=100) -> list:
     print("Downloading/Loading GLUE SST-2 Dataset from HuggingFace...")
     dataset = load_dataset("glue", "sst2", split="train")
     
-    # Label 1 is Positive, Label 0 is Negative
     pos_reviews = [row['sentence'] for row in dataset if row['label'] == 1]
     neg_reviews = [row['sentence'] for row in dataset if row['label'] == 0]
     
@@ -67,11 +58,8 @@ def prepare_sst2_data(sample_size_per_class=100) -> list:
     print(f"Prepared {len(sampled_texts)} balanced SST-2 sentences.")
     return sampled_texts
 
-
 def prepare_combined_data():
     print("Loading pre-distilled Oracle datasets...")
-    
-    # 1. Load the existing PyTorch Dataset objects
     try:
         imdb_ds = torch.load("data_imdb_sentiment.pt", weights_only=False)
         agnews_ds = torch.load("data_ag_news_classification.pt", weights_only=False)
@@ -80,11 +68,9 @@ def prepare_combined_data():
         print(f"Error: Could not find one of the datasets. {e}")
         return
 
-    # 2. Extract the underlying lists of dictionaries (.data) and concatenate
     print("Extracting tensors and combining...")
     master_records = imdb_ds.data + agnews_ds.data + sst2_ds.data
     
-    # 3. Shuffle the geometry so the Screwdriver doesn't overfit to one task at a time
     print(f"Combined {len(master_records)} total records. Shuffling...")
     random.shuffle(master_records)
     
@@ -92,13 +78,11 @@ def prepare_combined_data():
     torch.save(final_dataset, "data_combined.pt")
     
     print(f"\n[+] Success! Saved {len(final_dataset)} thoroughly shuffled vectors to 'data_combined.pt'")
-    
-    
 
 def main(task_name="imdb_sentiment", task_label="Analyze the sentiment of this text."):
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"\nInitializing Oracle-Guided Pipeline for {task_name}...")
+    print(f"\nInitializing Contrastive Task-Space Pipeline for {task_name}...")
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
@@ -125,7 +109,6 @@ def main(task_name="imdb_sentiment", task_label="Analyze the sentiment of this t
             "What is the primary theme of this passage?",
             "Categorize this news story:",
             "Identify the journalistic domain of this writing:",
-            
         ]
     elif task_name == "glue_sst2":
         raw_texts = prepare_sst2_data(sample_size_per_class=500)
@@ -137,37 +120,22 @@ def main(task_name="imdb_sentiment", task_label="Analyze the sentiment of this t
             "What is the overall sentiment of this sentence?",
             "Is the sentiment expressed here positive or negative?",
         ]
-        
     elif task_name == "combined":
-        
         prepare_combined_data()
         return
-        
-
-    # 2. CREATE THE ORACLE (Pre-Steer bert-large)
-    print("\n[1/4] Extracting Global PCA Axis...")
-    pc1_vector = harvester.extract_pca_axis(large_model, raw_texts)
     
-    print("[2/4] Locking the Oracle Matrix into BERT-Large...")
-    injected_weights = []
-    # Convert vector to Rank-1 matrix and scale it down
-    oracle_matrix = torch.outer(pc1_vector, pc1_vector) * 0.1 
-    
-    for layer_idx in range(24):
-        inject_weights(large_model, layer_idx, oracle_matrix)
-        injected_weights.append((layer_idx, oracle_matrix))
+    # --- PCA EXTRACTION REMOVED ---
+    # We no longer inject a static, linear PCA matrix. We want the Screwdriver 
+    # to learn the local manifold shift (Neutral -> Task Active) natively.
 
-    # 3. GLOBAL CAUSAL TRACE (Run Once)
-    print("[3/4] Mapping Concept Circuits (Causal Tracing)...")
-    # We only use a batch of 32 to get the variance map to save time
+    # 2. GLOBAL CAUSAL TRACE (Run Once on base large model)
+    print("\n[1/2] Mapping Concept Circuits (Causal Tracing)...")
     sample_prompts = [task_prompts_ensemble[0] + " " + text for text in raw_texts[:32]]
     target_variance = harvester.causal_trace_variance(large_model, sample_prompts)
 
-    # 4. RAPID EXTRACTION LOOP
-    print("\n[4/4] Starting Oracle-Distilled Dataset Generation...")
+    # 3. RAPID EXTRACTION LOOP
+    print("\n[2/2] Starting Task-Space Dataset Generation...")
     dataset_records = []
-    
-    # We only need the embedding once per task, not per sentence
     prompt_emb = harvester.embed_prompt(task_prompts_ensemble[0])
 
     for idx, text in enumerate(raw_texts):
@@ -179,8 +147,8 @@ def main(task_name="imdb_sentiment", task_label="Analyze the sentiment of this t
             small_model, base_prompt, task_prompts_ensemble, text
         )
         
-        # B. Target from Oracle Large Model 
-        # (calc_variance=False prevents the loop from grinding to a halt)
+        # B. Target from Oracle Large Model (Task-Space Projection)
+        # Without PCA injected, this now pure-subtracts Neutral from Active
         A_large_batch, B_large_batch, _ = harvester.extract_task_matrices(
             large_model, 
             [base_prompt + " " + text], 
@@ -199,13 +167,11 @@ def main(task_name="imdb_sentiment", task_label="Analyze the sentiment of this t
             'target_variance': target_variance.cpu()
         })
 
-    # 5. CLEANUP & SAVE
-    for l_idx, w in injected_weights:
-        remove_weights(large_model, l_idx, w)
-        
+    
+    # 4. SAVE
     final_dataset = BuildDataset.ScrewdriverDataset(dataset_records)
     torch.save(final_dataset, f"data_{task_name}.pt")
-    print(f"\n[*] Saved {len(final_dataset)} Oracle-distilled vectors to 'data_{task_name}.pt'")
+    print(f"\n[*] Saved {len(final_dataset)} Task-Space vectors to 'data_{task_name}.pt'")
     
     del small_model, large_model, harvester
     torch.cuda.empty_cache()

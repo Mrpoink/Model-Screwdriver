@@ -34,6 +34,36 @@ class ScrewdriverTrainer:
         self.mse_loss_fn = nn.MSELoss() 
         self.router_loss_fn = nn.MSELoss()
         
+    def _directional_loss(self, pred, target):
+        # Flatten matrices to vectors for similarity calculation
+        p_flat = pred.view(pred.size(0), -1)
+        t_flat = target.view(target.size(0), -1)
+        
+        mse = F.mse_loss(pred, target)
+        # 1.0 - cos_sim gives us a value that is 0 when directions match perfectly
+        cos_loss = 1.0 - F.cosine_similarity(p_flat, t_flat).mean()
+        
+        return mse + 0.5 * cos_loss
+    
+    def _extract_task_space_matrices(self, model, neutral_prompt, active_prompt, text_sample):
+        """
+        Finds the matrix update (A, B) that moves the model from a 
+        neutral state to a task-active state for a specific sample.
+        """
+        # 1. Neutral: "The event occurred on a Tuesday afternoon. [Text]"
+        # 2. Active: "Analyze the sentiment of this text: [Text]"
+        
+        # We reuse your existing logic but specifically for the Task-Neutral gap
+        A_large, B_large, _ = self.extract_task_matrices(
+            model, 
+            [neutral_prompt + " " + text_sample], 
+            [active_prompt + " " + text_sample], 
+            is_small=False, 
+            calc_variance=False
+        )
+        
+        return A_large[0], B_large[0]
+        
     def _orthogonal_penalty(self, A):
         """Forces the LoRA chunks to generate mathematically distinct rank slices."""
         B, L, R, D = A.shape
@@ -44,6 +74,14 @@ class ScrewdriverTrainer:
         identity = torch.eye(R, device=A.device).view(1, 1, R, R).expand(B, L, R, R)
         
         return F.mse_loss(sim_matrix, identity)
+    
+    def _distillation_loss(self, steered_output, target_labels):
+        """
+        Instead of MSE on weights, we use CrossEntropy on the final prediction.
+        This ensures the 'Task' is what's being learned, not just a weight pattern.
+        """
+        # This forces the Screwdriver to 'help' the Large Model classify better
+        return F.cross_entropy(steered_output, target_labels)
 
     def _train_router_epoch(self, tau, scaler, lamb):
         """Phase 1: Freezes the Generator, trains the MoE Router against Causal Tracing soft targets."""
@@ -92,19 +130,25 @@ class ScrewdriverTrainer:
         for batch in self.dataloader:
             A_small, B_small, p_emb, A_target, B_target, _ = [t.to(self.device) for t in batch]
             
-            self.generator_optimizer.zero_grad()
-            
-            with torch.autocast(device_type=self.device):
-            
+            with torch.amp.autocast('cuda'): # Updated syntax
                 A_pred, B_pred, _ = self.model(A_small, B_small, p_emb, tau=tau, hard=False)
                 
                 T_pred = torch.matmul(B_pred, A_pred)
-                T_target = torch.matmul(B_target, A_target)
-                
+                T_target = torch.matmul(B_target, A_target) # Correcting order for task-space
+
+                # MSE for magnitude
+                mse_loss = F.mse_loss(T_pred, T_target)
+
+                # Cosine Similarity for direction
+                p_flat = T_pred.view(T_pred.size(0), -1)
+                t_flat = T_target.view(T_target.size(0), -1)
+                cos_loss = 1.0 - F.cosine_similarity(p_flat, t_flat).mean()
+
+                total_gen_loss = mse_loss + 0.5 * cos_loss
                 w_loss = self.mse_loss_fn(T_pred, T_target)
                 ortho_loss = self._orthogonal_penalty(A_pred)
                 
-            scaler.scale(w_loss + 0.1 * ortho_loss).backward()
+            scaler.scale(total_gen_loss).backward()
             scaler.step(self.generator_optimizer)
             scaler.update()
             
@@ -169,10 +213,10 @@ class ScrewdriverTrainer:
         
         for epoch in range(total_epochs):
             tau = max(0.1, 5.0 * math.exp(-0.05 * epoch))
-            scaler = torch.cuda.amp.GradScaler()
-            lamb = 0.03
+            scaler = torch.amp.GradScaler(device='cuda')
+            lamb = 0.0 if epoch < 50 else lamb
             
-            if epoch < 13:
+            if epoch < 60:
                 phase = "ROUTER_ONLY"
                 avg_w, avg_r = self._train_router_epoch(tau, lamb=lamb, scaler=scaler)
                 self.scheduler.step()
