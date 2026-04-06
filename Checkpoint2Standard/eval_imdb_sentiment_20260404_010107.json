@@ -1,0 +1,25 @@
+{
+    "timestamp": "20260404_010107",
+    "configuration": {
+        "task_name": "imdb_sentiment",
+        "task_label": "Analyze the sentiment of this text.",
+        "baseline_prompt": "The movie had a second act.",
+        "screwdriver_weights": "ModelScrewdriver_imdb_sentiment.pth",
+        "eval_samples": 1000,
+        "target_rank": 8,
+        "beta": 0.3,
+        "healing_rate": 0.3,
+        "alpha_injection": 3.0,
+        "learning_rate": 5e-05,
+        "sparsity_lambda": 0.005
+    },
+    "metrics": {
+        "base_accuracy": 0.765,
+        "steered_accuracy": 0.755,
+        "accuracy_shift": -0.010000000000000009,
+        "base_log_loss": 0.46213302887134305,
+        "steered_log_loss": 0.45574933634026693,
+        "log_loss_shift": -0.006383692531076124,
+        "average_layers_altered": 2
+    }
+}

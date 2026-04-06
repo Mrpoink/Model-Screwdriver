@@ -159,8 +159,60 @@ class Harvester:
         target_variance = F.softmax(scores_tensor / 0.1, dim=0) 
         
         return target_variance
+    
+    def extract_pca_axis(self, model, dataset_texts: list):
+        """Extracts the 1st Principal Component (PC1) from a dataset to find the Semantic Axis."""
+        embeddings = []
+        
+        # 1. Gather all the representations
+        with torch.no_grad():
+            for text in dataset_texts:
+                inputs = self.tokenizer(text, return_tensors="pt", truncation=True).to(self.device)
+                outputs = model(**inputs)
+                embeddings.append(outputs.pooler_output.squeeze(0))
+                
+        # Shape: (Num_Samples, 1024)
+        X = torch.stack(embeddings)
+        
+        # 2. Mean-center the data (Crucial for PCA)
+        X_centered = X - X.mean(dim=0)
+        
+        # 3. Calculate PCA using SVD (Singular Value Decomposition)
+        # V contains the principal components
+        U, S, V = torch.pca_lowrank(X_centered, q=1)
+        
+        # 4. Extract PC1 (The primary directional vector of the dataset)
+        # Shape: (1024,)
+        pc1_vector = V[:, 0] 
+        
+        return pc1_vector
+    
+    def extract_ensembled_matrices(self, model, base_prompt: str, task_prompts: list, text_sample: str):
+        """
+        task_prompts: A list of synonymous instructions 
+        (e.g., ["Analyze sentiment:", "Determine emotion:", "Evaluate polarity:"])
+        """
+        A_list, B_list = [], []
+        
+        # Loop through the synonymous prompts for the same text sample
+        for instruction in task_prompts:
+            # We use the standard extraction for each variation
+            A, B, _ = self.extract_task_matrices(
+                model, 
+                [base_prompt + " " + text_sample], 
+                [instruction + " " + text_sample], 
+                is_small=True
+            )
+            A_list.append(A)
+            B_list.append(B)
+            
+        # mathematically average the tensors to cancel out the vocabulary noise
+        A_clean = torch.stack(A_list).mean(dim=0)
+        B_clean = torch.stack(B_list).mean(dim=0)
+        
+        return A_clean, B_clean
 
-    def extract_task_matrices(self, model, base_prompts: list, task_prompts: list, is_small=False):
+    def extract_task_matrices(self, model, base_prompts: list, task_prompts: list, is_small=False, calc_variance=True):
         """Gets the task vectors and turns them into A and B matrices for ALL layers.
         If large model, also generates the soft target variance curve.
 
@@ -235,10 +287,13 @@ class Harvester:
         
         if is_small:
             return A_final_batch, B_final_batch, None 
-        else:
+        elif calc_variance:
             ## Generate the Soft Targets map for the Screwdriver Router
             target_variance = self.causal_trace_variance(model, task_prompts)
             return A_final_batch, B_final_batch, target_variance
+        else:
+            ## Return None for variance if we are just doing a rapid extraction pass
+            return A_final_batch, B_final_batch, None
 
     def embed_prompt(self, text: str) -> torch.Tensor:
         """Uses smaller model to generate contextual embeddings for the task label

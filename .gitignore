@@ -210,3 +210,4 @@ __marimo__/
 Model-Screwdriver.code-workspace
 
 *.pt
+*.pth

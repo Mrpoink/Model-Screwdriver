@@ -1,0 +1,20 @@
+{
+    "timestamp": "20260406_045735",
+    "loop_iteration": 4,
+    "configuration": {
+        "task_name": "ag_news_classification",
+        "dataset_path": "ag_news",
+        "config_name": null,
+        "task_label": "Classify the news topic of this article:",
+        "baseline_prompt": "The event occurred on a Tuesday afternoon."
+    },
+    "metrics": {
+        "base_accuracy": 0.87,
+        "steered_accuracy": 0.87,
+        "accuracy_shift": 0.0,
+        "base_log_loss": 0.3913215233994643,
+        "steered_log_loss": 0.3929821837498485,
+        "log_loss_shift": 0.0016606603503842021,
+        "average_layers_altered": 2
+    }
+}

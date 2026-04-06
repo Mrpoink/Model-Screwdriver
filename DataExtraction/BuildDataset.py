@@ -30,29 +30,3 @@ class ScrewdriverDataset(Dataset):
             item['target_variance']
         )
         
-    def build_dataset(self, task_config:list, harvester:Harvester):
-        
-        for config in task_config:
-            print(f"Harvesting: {config['task_label']}")
-            
-            A_small, B_small = harvester.extract_task_matrices(
-                harvester.small_model, config['small_layer'],
-                config['base_prompts'], config['task_prompts'], is_small=True
-            )
-            
-            A_large, B_large, target_variance = harvester.extract_task_matrices(
-                harvester.large_model, config['large_layer'],
-                config['base_prompts'], config['task_prompts']
-            )
-            
-            prompt_emb = harvester.embed_prompt(config['task_label'])
-            
-            self.data.append({
-                'A_small': A_small,
-                'B_small': B_small,
-                'prompt_emb': prompt_emb,
-                'A_large': A_large,
-                'B_large': B_large,
-                'target_variance' : target_variance
-            
-            })

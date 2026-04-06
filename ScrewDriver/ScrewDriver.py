@@ -24,11 +24,24 @@ class ModelScrewDriver(nn.Module):
         self.compress_small_task = nn.Linear(dim_t_small, 1024)
         self.compress_prompt = nn.Linear(d_prompt, 512)
         
+        self.router_prompt_compressor = nn.Sequential(
+            nn.Linear(d_prompt, 64),
+            nn.ReLU()
+        )
+        
         fused_dim = 1024 + 512
         
         # 2. The MoE Router
         # Outputs exactly 24 logits representing the confidence for each large model layer
-        self.predict_confidence = nn.Linear(fused_dim, num_large_layers)
+        
+        router_input_dim = (d_small * 2) + 64
+        
+        self.predict_confidence = nn.Sequential(
+            nn.Linear(router_input_dim, 512),
+            nn.LayerNorm(512),
+            nn.GELU(),
+            nn.Linear(512, num_large_layers)
+        )
         
         # 3. Layer Identity Embedding
         # Tells the Shared Generator WHICH of the 24 layers it is currently forging
@@ -41,8 +54,46 @@ class ModelScrewDriver(nn.Module):
         # It only generates ONE matrix at a time.
         generator_input_dim = fused_dim + 256 + 64
         
-        self.generate_A_shared = nn.Linear(generator_input_dim, 1 * d_large)
-        self.generate_B_shared = nn.Linear(generator_input_dim, d_large * 1)
+        self.generator_trunk = nn.Sequential(
+            nn.Linear(generator_input_dim, 1024),
+            nn.LayerNorm(1024),
+            nn.GELU(),
+            nn.Linear(1024, 1024),
+            nn.LayerNorm(1024),
+            nn.GELU()
+        )
+        
+        self.generate_A_shared = nn.Linear(1024, 1 * d_large)
+        self.generate_B_shared = nn.Linear(1024, d_large * 1)
+        
+        self.magnitude_scalar = nn.Parameter(torch.ones(1) * 0.1)
+        
+        
+    def gumbel_sigmoid(logits: torch.Tensor, temperature: float = 1.0, hard: bool = False):
+        """
+        A stable, differentiable binary gate.
+        During training, uses Gumbel noise to force exploration.
+        During inference, uses a hard step function.
+        """
+        # 1. Generate Gumbel Noise
+        u = torch.rand_like(logits)
+        gumbel_noise = -torch.log(-torch.log(u + 1e-8) + 1e-8)
+        
+        # 2. Add noise and apply temperature
+        noisy_logits = (logits + gumbel_noise) / temperature
+        y_soft = torch.sigmoid(noisy_logits)
+        
+        if hard:
+            # Straight-Through Estimator: 
+            # Forward pass is a hard 1 or 0, but backward pass uses the soft gradient
+            y_hard = (y_soft > 0.5).float()
+            ret = y_hard - y_soft.detach() + y_soft
+        else:
+            ret = y_soft
+            
+        return ret
+            
+        
         
         
     def forward(self, A_small: torch.Tensor, B_small: torch.Tensor,
@@ -64,8 +115,17 @@ class ModelScrewDriver(nn.Module):
         # Shape: (Batch, 1536)
         fused_context = torch.cat([t_small_features, prompt_features], dim=-1)
         
-        #Shape: (Batch, 24)
-        logits = self.predict_confidence(fused_context)
+        # --- NEW ROUTER INPUT PIPELINE ---
+        # 1. Pool the small matrices to get a clean summary of the sentence
+        # A_small shape: (Batch, 12, 1, 768) -> mean across layers -> (Batch, 768)
+        A_pooled = A_small.mean(dim=1).squeeze(1) 
+        B_pooled = B_small.mean(dim=1).squeeze(2) 
+        sentence_features = torch.cat([A_pooled, B_pooled], dim=-1) # Shape: (Batch, 1536)
+        
+        router_prompt = self.router_prompt_compressor(prompt_emb)
+        # 3. Fuse and predict
+        router_input = torch.cat([sentence_features, router_prompt], dim=-1) # Shape: (Batch, 1600)
+        logits = self.predict_confidence(router_input)
         
         if self.training:
             # Add uniform noise, transform to Gumbel noise to allow exploration
@@ -81,50 +141,52 @@ class ModelScrewDriver(nn.Module):
             # Straight-Through Estimator (STE): Forces a hard 1 or 0 to save compute
             y_hard = (y_soft > 0.5).float()
             # The Magic: y_hard goes forward (zeroing out tensors), y_soft gradients go backward
-            gate = (y_hard - y_soft).detach() + y_soft
+            gate = y_hard - y_soft.detach() + y_soft
         else:
             # During Router training, we want the smooth probabilities
             gate = y_soft
         
-        A_large_list = []
-        B_large_list = []
+        B = batch_size
+        L = self.num_large_layers
+        R = self.target_rank
         
-        for i in range(self.num_large_layers):
-            
-            # Tell the network which layer it is currently looking at
-            layer_idx = torch.full((batch_size,), i, dtype=torch.long, device=prompt_emb.device)
-            l_emb = self.layer_embedding(layer_idx)
-            
-            A_chunks = []
-            B_chunks = []
-            
-            for c in range(self.target_rank):
-                chunk_idx = torch.full((batch_size,), c, dtype=torch.long, device=prompt_emb.device)
-                c_emb = self.chunk_embedding(chunk_idx)
-                
-                gen_input = torch.cat([fused_context, l_emb, c_emb], dim=-1)
-                
-                # Generate Rank-1 slices
-                A_c = self.generate_A_shared(gen_input).view(batch_size, 1, 1, self.d_large)
-                B_c = self.generate_B_shared(gen_input).view(batch_size, 1, self.d_large, 1)
-                
-                A_chunks.append(A_c)
-                B_chunks.append(B_c)
-            
-            # Stack the slices along the Rank dimension to create the high-rank matrix
-            # A_i shape becomes: (Batch, 1, target_rank, 1024)
-            A_i = torch.cat(A_chunks, dim=2)
-            # B_i shape becomes: (Batch, 1, 1024, target_rank)
-            B_i = torch.cat(B_chunks, dim=3)
-            
-            # Apply the Router Gate
-            A_gated = A_i * gate[:, i].view(batch_size, 1, 1, 1)
-            
-            A_large_list.append(A_gated)
-            B_large_list.append(B_i)
+        # 1. Create the coordinate grids for Layers and Chunks
+        # layer_idx: (B, L, R)
+        layer_idx = torch.arange(L, device=prompt_emb.device).view(1, L, 1).expand(B, L, R)
+        # chunk_idx: (B, L, R)
+        chunk_idx = torch.arange(R, device=prompt_emb.device).view(1, 1, R).expand(B, L, R)
         
-        A_large = torch.cat(A_large_list, dim=1)
-        B_large = torch.cat(B_large_list, dim=1)
+        # 2. Get the embeddings for all coordinates simultaneously
+        l_emb = self.layer_embedding(layer_idx) # Shape: (B, L, R, 256)
+        c_emb = self.chunk_embedding(chunk_idx) # Shape: (B, L, R, 64)
+        
+        # 3. Broadcast the context to match the grid
+        # fused_context: (B, 1536) -> (B, 1, 1, 1536) -> (B, L, R, 1536)
+        fused_expanded = fused_context.view(B, 1, 1, -1).expand(B, L, R, -1)
+        
+        # 4. Concatenate everything together
+        # Shape: (B, L, R, 1856)
+        gen_input = torch.cat([fused_expanded, l_emb, c_emb], dim=-1)
+        
+        # 5. Pass through the Deep Forge exactly ONCE
+        trunk_features = self.generator_trunk(gen_input) # Shape: (B, L, R, 640)
+        
+        # 6. Branch and shape the matrices
+        raw_A = self.generate_A_shared(trunk_features) # Shape: (B, L, R, 1024)
+        raw_B = self.generate_B_shared(trunk_features) # Shape: (B, L, R, 1024)
+        
+        # Apply the governor to A
+        A_i = (torch.tanh(raw_A) * self.magnitude_scalar) # Shape: (B, L, R, 1024)
+        
+        # Transpose B so it aligns for matrix multiplication later
+        # B needs to be (Batch, Layers, 1024, Rank)
+        B_i = raw_B.transpose(-1, -2) 
+        
+        # 7. Apply the Router Gate
+        # gate is (B, L). We expand it to (B, L, 1, 1) so it multiplies across Rank and d_large correctly.
+        gate_expanded = gate.view(B, L, 1, 1)
+        A_large = A_i * gate_expanded
+        B_large = B_i
         
         return A_large, B_large, gate
     

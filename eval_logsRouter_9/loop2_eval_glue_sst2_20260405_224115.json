@@ -1,0 +1,20 @@
+{
+    "timestamp": "20260405_224115",
+    "loop_iteration": 2,
+    "configuration": {
+        "task_name": "glue_sst2",
+        "dataset_path": "glue",
+        "config_name": "sst2",
+        "task_label": "Determine if the emotion is positive or negative:",
+        "baseline_prompt": "The event occurred on a Tuesday afternoon."
+    },
+    "metrics": {
+        "base_accuracy": 0.81,
+        "steered_accuracy": 0.81,
+        "accuracy_shift": 0.0,
+        "base_log_loss": 0.37955453450864696,
+        "steered_log_loss": 0.38221950708880376,
+        "log_loss_shift": 0.002664972580156799,
+        "average_layers_altered": 2
+    }
+}

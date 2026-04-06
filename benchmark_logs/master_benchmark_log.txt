@@ -1,0 +1,12 @@
+
+--- LOOP 1 | MODEL: IMDB_SENTIMENT ---
+  Eval on imdb_sentiment:
+    Base Acc: 0.8100 | Steered Acc: 0.8200 | Shift: +0.0100
+
+--- LOOP 1 | MODEL: AG_NEWS_CLASSIFICATION ---
+  Eval on ag_news_classification:
+    Base Acc: 0.8700 | Steered Acc: 0.8700 | Shift: +0.0000
+
+--- LOOP 1 | MODEL: GLUE_SST2 ---
+  Eval on glue_sst2:
+    Base Acc: 0.8100 | Steered Acc: 0.8000 | Shift: -0.0100
