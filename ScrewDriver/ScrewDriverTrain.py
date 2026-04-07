@@ -1,13 +1,15 @@
 import math
+import glob
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from ScrewDriver.ScrewDriver import ModelScrewDriver
 from StartDatasetBuild import main as buildDataset
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from ScrewDriver.Tools import AdaptiveSpikeScheduler
+from DataExtraction.BuildDataset import ScrewdriverDataset
 
 class ScrewdriverTrainer:
     def __init__(self, model, dataloader, device, gen_lr=5e-5, r_lr=7.5e-5):
@@ -19,23 +21,22 @@ class ScrewdriverTrainer:
         
         # --- OPTIMIZERS ---
         # Two distinct optimizers to prevent gradient bleed
-        router_params = list(self.model.predict_confidence.parameters()) + \
-                        list(self.model.router_prompt_compressor.parameters())
-        self.router_optimizer = optim.Adam(router_params, lr=self.r_lr)
+        self.base_params = list(self.model.sentence_compressor.parameters()) + \
+                           list(self.model.prompt_compressor.parameters()) + \
+                           list(self.model.shared_trunk.parameters())
         
-        # Connect the Deep Forge, the Chunk Embeddings, and the Magnitude Leash
-        self.generator_params = list(self.model.compress_small_task.parameters()) + \
-                                list(self.model.compress_prompt.parameters()) + \
-                                list(self.model.layer_embedding.parameters()) + \
+        self.router_params = list(self.model.router_head.parameters())
+        
+        self.generator_params = list(self.model.layer_embedding.parameters()) + \
                                 list(self.model.chunk_embedding.parameters()) + \
-                                list(self.model.generator_trunk.parameters()) + \
+                                list(self.model.generator_head.parameters()) + \
                                 list(self.model.generate_A_shared.parameters()) + \
                                 list(self.model.generate_B_shared.parameters()) + \
-                                [self.model.magnitude_scalar] # Scalar is a single parameter, not a module
+                                [self.model.magnitude_scalar]
                                 
-        self.generator_optimizer = optim.Adam(self.generator_params, lr=self.gen_lr)
-        
-        self.scheduler = CosineAnnealingLR(self.router_optimizer, T_max=150, eta_min=1e-7)
+        # Both optimizers update the base_params
+        self.router_optimizer = optim.Adam(self.base_params + self.router_params, lr=self.r_lr)
+        self.generator_optimizer = optim.Adam(self.base_params + self.generator_params, lr=self.gen_lr)
         
         # --- LOSS FUNCTIONS ---
         self.mse_loss_fn = nn.MSELoss() 
@@ -118,7 +119,8 @@ class ScrewdriverTrainer:
         """Phase 1: Freezes the Generator, trains the MoE Router against Causal Tracing soft targets."""
         # Freeze Generator, Unfreeze Router
         for p in self.generator_params: p.requires_grad_(False)
-        for p in self.model.predict_confidence.parameters(): p.requires_grad_(True)
+        # Unfreeze Shared Trunk and Router Head
+        for p in self.base_params + self.router_params: p.requires_grad_(True)
         
         total_r_loss = 0.0
         
@@ -152,9 +154,10 @@ class ScrewdriverTrainer:
 
     def _train_generator_epoch(self, tau, scaler):
         """Phase 2: Freezes the Router, uses its predicted gates to train the Generator's MSE."""
-        # Freeze Router, Unfreeze Generator
-        for p in self.model.predict_confidence.parameters(): p.requires_grad_(False)
-        for p in self.generator_params: p.requires_grad_(True)
+        # Freeze Router Head
+        for p in self.router_params: p.requires_grad_(False)
+        # Unfreeze Shared Trunk and Generator Head
+        for p in self.base_params + self.generator_params: p.requires_grad_(True)
         
         total_gen_loss_accum, total_o_loss = 0.0, 0.0
         
@@ -287,15 +290,20 @@ class ScrewdriverTrainer:
 def main(lr=5e-5, task_name="imdb_sentiment", task_label="Analyze the sentiment of this text."):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    print(f"Loading training data for {task_name}...")
+    print("Loading sharded dataset...")
+    shard_files = sorted(glob.glob("master_dataset/shard_*.pt"))
     
-    # Pass the task parameters down
-    #buildDataset(task_name=task_name, task_label=task_label)
+    # Load all lists of dicts
+    all_shards = [torch.load(f, weights_only=False) for f in shard_files]
     
-    # Load the task-specific data
-    dataset = torch.load(f"data_{task_name}.pt", weights_only=False)
+    # Optional: If your ScrewdriverDataset class still expects a single list, 
+    # you can concatenate the lists flatly, or adapt it. 
+    # Flat concatenation is easiest:
+    flat_data = [item for sublist in all_shards for item in sublist]
+    
+    dataset = ScrewdriverDataset(flat_data)
     dataloader = DataLoader(dataset, batch_size=12, shuffle=True)
-
+    
     print("Initializing Screwdriver Engine....")
     screwdriver = ModelScrewDriver(
         d_small=768, 

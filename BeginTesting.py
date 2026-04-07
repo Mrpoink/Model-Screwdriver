@@ -173,7 +173,7 @@ def main():
             
             # --- 1. BUILD DATASET ---
             print(f"  [1/3] Building Dataset for {pipeline_name}...")
-            BuildDatasetMain(task_name=pipeline_name)
+            BuildDatasetMain()
             
             # --- 2. TRAIN SCREWDRIVER ---
             print(f"\n  [2/3] Training Screwdriver for {pipeline_name}...")
