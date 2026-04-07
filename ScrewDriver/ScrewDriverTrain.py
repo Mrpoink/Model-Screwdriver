@@ -19,21 +19,22 @@ class ScrewdriverTrainer:
         
         # --- OPTIMIZERS ---
         # Two distinct optimizers to prevent gradient bleed
-        router_params = list(self.model.predict_confidence.parameters()) + \
-                        list(self.model.router_prompt_compressor.parameters())
-        self.router_optimizer = optim.Adam(router_params, lr=self.r_lr)
+        base_params = list(self.model.sentence_compressor.parameters()) + \
+                      list(self.model.prompt_compressor.parameters()) + \
+                      list(self.model.shared_trunk.parameters())
         
-        # Connect the Deep Forge, the Chunk Embeddings, and the Magnitude Leash
-        self.generator_params = list(self.model.compress_small_task.parameters()) + \
-                                list(self.model.compress_prompt.parameters()) + \
-                                list(self.model.layer_embedding.parameters()) + \
+        router_head_params = list(self.model.router_head.parameters())
+        
+        generator_head_params = list(self.model.layer_embedding.parameters()) + \
                                 list(self.model.chunk_embedding.parameters()) + \
-                                list(self.model.generator_trunk.parameters()) + \
+                                list(self.model.generator_head.parameters()) + \
                                 list(self.model.generate_A_shared.parameters()) + \
                                 list(self.model.generate_B_shared.parameters()) + \
-                                [self.model.magnitude_scalar] # Scalar is a single parameter, not a module
+                                [self.model.magnitude_scalar]
                                 
-        self.generator_optimizer = optim.Adam(self.generator_params, lr=self.gen_lr)
+        # Both optimizers update the base_params, allowing the latent vector to mature continually
+        self.router_optimizer = optim.Adam(base_params + router_head_params, lr=self.r_lr)
+        self.generator_optimizer = optim.Adam(base_params + generator_head_params, lr=self.gen_lr)
         
         self.scheduler = CosineAnnealingLR(self.router_optimizer, T_max=150, eta_min=1e-7)
         
