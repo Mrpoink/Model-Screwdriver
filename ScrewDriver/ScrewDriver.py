@@ -66,7 +66,12 @@ class ModelScrewDriver(nn.Module):
         self.generate_A_shared = nn.Linear(1024, 1 * d_large)
         self.generate_B_shared = nn.Linear(1024, d_large * 1)
         
+        torch.nn.init.normal_(self.generate_B_shared.weight, std=1e-4)
+        torch.nn.init.zeros_(self.generate_B_shared.bias)
+        
         self.magnitude_scalar = nn.Parameter(torch.ones(1) * 0.1)
+        
+        
         
         
     def gumbel_sigmoid(logits: torch.Tensor, temperature: float = 1.0, hard: bool = False):
@@ -97,7 +102,7 @@ class ModelScrewDriver(nn.Module):
         
         
     def forward(self, A_small: torch.Tensor, B_small: torch.Tensor,
-                prompt_emb: torch.Tensor, tau=1.0, hard=True):
+                prompt_emb: torch.Tensor, tau=1.0, hard=True, override_gate=None):
         
         batch_size = prompt_emb.shape[0] ## layer depth
         
@@ -128,6 +133,8 @@ class ModelScrewDriver(nn.Module):
 
         # 3. Predict Gates
         logits = self.predict_confidence(router_input)
+        
+        logits = torch.clamp(logits, min=-15.0, max=15.0)
         gate = F.gumbel_softmax(logits, tau=tau, hard=hard, dim=-1)
         
         if self.training:
@@ -148,6 +155,9 @@ class ModelScrewDriver(nn.Module):
         else:
             # During Router training, we want the smooth probabilities
             gate = y_soft
+            
+        if override_gate is not None:
+            gate = override_gate
         
         B = batch_size
         L = self.num_large_layers
@@ -179,16 +189,16 @@ class ModelScrewDriver(nn.Module):
         raw_B = self.generate_B_shared(trunk_features) # Shape: (B, L, R, 1024)
         
         # Apply the governor to A
-        A_i = (torch.tanh(raw_A) * self.magnitude_scalar) # Shape: (B, L, R, 1024)
+        A_i = torch.tanh(raw_A) * torch.sigmoid(self.magnitude_scalar) * 0.5 # Shape: (B, L, R, 1024)
         
         # Transpose B so it aligns for matrix multiplication later
         # B needs to be (Batch, Layers, 1024, Rank)
-        B_i = raw_B.transpose(-1, -2) 
+        B_i = (torch.tanh(raw_B / 2.0) * 2.0).transpose(-1, -2)
         
         # 7. Apply the Router Gate
         # gate is (B, L). We expand it to (B, L, 1, 1) so it multiplies across Rank and d_large correctly.
         gate_expanded = gate.view(B, L, 1, 1)
-        A_large = A_i * gate_expanded
+        A_large = A_i * gate_expanded.detach()
         B_large = B_i
         
         return A_large, B_large, gate

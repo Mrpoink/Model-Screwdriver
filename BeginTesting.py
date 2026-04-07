@@ -91,7 +91,16 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
             remove_weights(large_model, l_idx, w)
 
     # 3. LINEAR PROBE
-    X_b_train, X_b_test, y_train, y_test = train_test_split(np.vstack(base_features), labels, test_size=0.2, random_state=42)
+    X_base = np.vstack(base_features)
+    X_steered = np.vstack(steered_features)
+
+    # Clean out any stray NaNs (replace with 0)
+    if np.isnan(X_base).any() or np.isnan(X_steered).any():
+        print("      [!] Warning: NaNs detected in features. Cleaning...")
+        X_base = np.nan_to_num(X_base)
+        X_steered = np.nan_to_num(X_steered)
+
+    X_b_train, X_b_test, y_train, y_test = train_test_split(X_base, labels, test_size=0.2, random_state=42)
     X_s_train, X_s_test, _, _ = train_test_split(np.vstack(steered_features), labels, test_size=0.2, random_state=42)
 
     clf_base = LogisticRegression(max_iter=1000).fit(X_b_train, y_train)
