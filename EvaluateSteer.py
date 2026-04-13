@@ -1,193 +1,184 @@
+import os
 import torch
 import numpy as np
-from transformers import BertModel, BertTokenizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 from datasets import load_dataset
-from DataExtraction.TaskVectorHarvester import Harvester
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report
+from transformers import BertModel, BertTokenizer
+
 from ScrewDriver.ScrewDriver import ModelScrewDriver
+from DataExtraction.TaskVectorHarvester import Harvester
+from ScrewDriver.Tools import inject_weights, remove_weights
 
-# --- INJECTION HELPERS ---
-def inject_weights(model, layer_idx: int, delta_W: torch.Tensor):
-    target_module = model.encoder.layer[layer_idx].attention.output.dense
-    with torch.no_grad():
-        target_module.weight.data.add_(delta_W)
-
-def remove_weights(model, layer_idx: int, delta_W: torch.Tensor):
-    target_module = model.encoder.layer[layer_idx].attention.output.dense
-    with torch.no_grad():
-        target_module.weight.data.sub_(delta_W)
-
-def get_imdb_subset(num_samples=1000):
-    print("Loading IMDB Evaluation Dataset...")
-    dataset = load_dataset("imdb", split="test")
-    
-    # Get short reviews for faster processing
-    short_reviews = [row for row in dataset if len(row['text'].split()) < 100]
-    
-    pos_reviews = [row for row in short_reviews if row['label'] == 1][:num_samples // 2]
-    neg_reviews = [row for row in short_reviews if row['label'] == 0][:num_samples // 2]
-    
-    combined = pos_reviews + neg_reviews
-    np.random.shuffle(combined)
-    
-    texts = [row['text'] for row in combined]
-    labels = [row['label'] for row in combined]
-    return texts, labels
-
-def extract_features_in_batches(model, tokenizer, texts, device, batch_size=32):
+def extract_features(texts, model, tokenizer, screwdriver, harvester, device, task_config, use_screwdriver=False):
+    """Extracts embeddings. If use_screwdriver=True, it dynamically steers BERT per sentence."""
     features = []
-    model.eval()
-    with torch.no_grad():
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i+batch_size]
-            inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True).to(device)
-            outputs = model(**inputs)
-            # Use pooler_output for classification
-            features.append(outputs.pooler_output.cpu().numpy())
+    
+    # Pre-embed the prompt so the Screwdriver knows the task
+    prompt_emb = harvester.embed_prompt(task_config['task_label']).unsqueeze(0).to(device)
+
+    for idx, text in enumerate(texts):
+        if idx % 100 == 0 and idx > 0:
+            print(f"      Processed {idx}/{len(texts)} samples...")
+            
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=128).to(device)
+        
+        injected_weights = []
+        
+        # --- SCREWDRIVER INJECTION (Soft Routing) ---
+        if use_screwdriver:
+            A_small_b, B_small_b, _ = harvester.extract_task_matrices(
+                harvester.small_model, [task_config['baseline_prompt'] + " " + text], 
+                [task_config['task_label'] + " " + text], is_small=True, calc_variance=False
+            )
+            
+            with torch.inference_mode():
+                A_large, B_large, gate = screwdriver(
+                    A_small_b[0].unsqueeze(0).to(device), 
+                    B_small_b[0].unsqueeze(0).to(device), 
+                    prompt_emb, 
+                    hard=False 
+                )
+                
+                # Using the exact same Top-K=3 that proved successful in clustering
+                active_layers = torch.topk(gate.squeeze(), k=3).indices.tolist()
+                delta_W_seq = torch.matmul(B_large.squeeze(0), A_large.squeeze(0)).mT
+
+            for l_idx in active_layers:
+                # Inject with the 0.5 dampener
+                scaled_W = delta_W_seq[l_idx] * 0.5
+                inject_weights(model, l_idx, scaled_W)
+                injected_weights.append((l_idx, scaled_W))
+
+        # --- INFERENCE ---
+        with torch.inference_mode():
+            features.append(model(**inputs).pooler_output.cpu().numpy())
+
+        # --- CLEANUP ---
+        if use_screwdriver:
+            for l_idx, w in injected_weights:
+                remove_weights(model, l_idx, w)
+
     return np.vstack(features)
+
+
+def run_accuracy_benchmark(task_config, screwdriver, large_model, tokenizer, harvester, device, train_samples=800, test_samples=200):
+    print(f"\n{'='*50}\nSTARTING DOWNSTREAM ACCURACY BENCHMARK: {task_config['task_name']}\n{'='*50}")
+    
+    # 1. LOAD DATASET
+    print("[*] Loading Dataset...")
+    if task_config.get('config_name'):
+        dataset = load_dataset(task_config['dataset_path'], task_config['config_name'], split=task_config['split'])
+    else:
+        dataset = load_dataset(task_config['dataset_path'], split=task_config['split'])
+
+    # Extract text and labels, ensuring they exist
+    valid_data = [(row.get('sentence', row.get('text')), row['label']) for row in dataset if row.get('label') is not None]
+    
+    # Filter for length
+    valid_data = [(t, l) for t, l in valid_data if len(t.split()) < 100]
+    
+    # --- ADD THESE TWO LINES ---
+    import random
+    random.shuffle(valid_data)
+    # ---------------------------
+    
+    # Now it will grab a mixed bag of 800 samples!
+    train_data = valid_data[:train_samples]
+    test_data = valid_data[train_samples : train_samples + test_samples]
+    
+    X_train_texts, y_train = [item[0] for item in train_data], [item[1] for item in train_data]
+    X_test_texts, y_test = [item[0] for item in test_data], [item[1] for item in test_data]
+
+    # 2. EXTRACT BASE FEATURES (The Control)
+    print("\n[+] Extracting BASELINE Features...")
+    X_train_base = extract_features(X_train_texts, large_model, tokenizer, screwdriver, harvester, device, task_config, use_screwdriver=False)
+    X_test_base = extract_features(X_test_texts, large_model, tokenizer, screwdriver, harvester, device, task_config, use_screwdriver=False)
+
+    # 3. EXTRACT STEERED FEATURES (The Screwdriver)
+    print("\n[+] Extracting STEERED Features (Applying Weights)...")
+    X_train_steered = extract_features(X_train_texts, large_model, tokenizer, screwdriver, harvester, device, task_config, use_screwdriver=True)
+    X_test_steered = extract_features(X_test_texts, large_model, tokenizer, screwdriver, harvester, device, task_config, use_screwdriver=True)
+
+    # 4. TRAIN CLASSIFIERS & EVALUATE
+    print("\n[*] Training Linear Probes...")
+    
+    clf_base = LogisticRegression(max_iter=1000)
+    clf_base.fit(X_train_base, y_train)
+    base_preds = clf_base.predict(X_test_base)
+    base_acc = accuracy_score(y_test, base_preds)
+
+    clf_steered = LogisticRegression(max_iter=1000)
+    clf_steered.fit(X_train_steered, y_train)
+    steered_preds = clf_steered.predict(X_test_steered)
+    steered_acc = accuracy_score(y_test, steered_preds)
+
+    # 5. THE VERDICT
+    print(f"\n{'='*50}\nFINAL BENCHMARK RESULTS: {task_config['task_name']}\n{'='*50}")
+    print(f"Base BERT Accuracy:     {base_acc * 100:.2f}%")
+    print(f"Steered BERT Accuracy:  {steered_acc * 100:.2f}%")
+    
+    accuracy_shift = (steered_acc - base_acc) * 100
+    print(f"Net Accuracy Shift:     {accuracy_shift:+.2f}%")
+    
+    if accuracy_shift > 0:
+        print("\n[SUCCESS] The Screwdriver successfully improved downstream task execution!")
+    else:
+        print("\n[NOTE] The Screwdriver did not improve absolute accuracy on this sample.")
+
 
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
-    print("Loading Models...")
+    print(f"Initializing Downstream Evaluator on {device}...")
+
+    # Load Base Models
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
     large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
-    
     harvester = Harvester(small_model, large_model, tokenizer, device=device)
     
-    print("Loading Screwdriver Engine...")
-    screwdriver = ModelScrewDriver(
-        d_small=768, d_large=1024, target_rank=8, d_prompt=768, 
-        num_small_layers=12, num_large_layers=24
-    ).to(device)
-    screwdriver.load_state_dict(torch.load("ModelScrewdriver.pth", weights_only=True))
-    screwdriver.eval()
-
-    # 1. Get Test Data
-    texts, labels = get_imdb_subset(num_samples=1000)
+    # Load the trained Screwdriver (Ensure target_rank matches your trained weights, 8 or 16)
+    screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=8, num_small_layers=12, num_large_layers=24).to(device)
     
-    # 2. Extract Base Features
-    print("\n--- Extracting Base Model Features ---")
-    base_features = extract_features_in_batches(large_model, tokenizer, texts, device)
-
-    # 3. Forge and Inject Steered Weights
-    print("\n--- Dynamically Extracting Steered Features ---")
-    
-    task_label = "Analyze the sentiment of this text."
-    baseline_prompt = "The movie had a second act."
-    prompt_emb = harvester.embed_prompt(task_label).unsqueeze(0).to(device)
-    
-    steered_features = []
-    
-    # We must crank the alpha to compensate for the Rank-1 bottleneck
-    alpha = 1.0 
-    beta, healing_rate = 0.5, 0.3
-    
-    # We must process sequentially so the Screwdriver can forge custom weights per prompt
-    for idx, text in enumerate(texts):
-        if idx % 100 == 0:
-            print(f"  [*] Processing {idx}/{len(texts)}...")
-            
-        # 1. Scout the unique geometry of THIS prompt
-        A_small_batch, B_small_batch, _ = harvester.extract_task_matrices(
-            small_model, [baseline_prompt], [text], is_small=True
-        )
-        A_small = A_small_batch[0].unsqueeze(0).to(device)
-        B_small = B_small_batch[0].unsqueeze(0).to(device)
-
-        # 2. Forge the dynamic weights
-        with torch.no_grad():
-            A_large, B_large, gate = screwdriver(A_small, B_small, prompt_emb, hard=True)
-            active_layers = torch.where(gate.squeeze() > 0.5)[0].tolist()
-            
-            A_large = A_large.squeeze(0)
-            B_large = B_large.squeeze(0)
-            delta_W_sequence = torch.matmul(B_large, A_large).transpose(-1, -2)
-
-        # 3. Inject
-        previous_layer = -999
-        injected_weights = []
-        
-        for layer_idx in active_layers:
-            distance = layer_idx - previous_layer
-            decay = 1.0 if distance > 100 else 1.0 - (beta * np.exp(-healing_rate * (distance - 1)))
-            
-            scaled_delta_W = alpha * decay * delta_W_sequence[layer_idx]
-            
-            inject_weights(large_model, layer_idx, scaled_delta_W)
-            injected_weights.append((layer_idx, scaled_delta_W))
-            previous_layer = layer_idx
-
-        # 4. Infer
-        inputs = tokenizer(text, return_tensors="pt", truncation=True).to(device)
-        with torch.no_grad():
-            outputs = large_model(**inputs)
-            steered_features.append(outputs.pooler_output.cpu().numpy())
-
-        # 5. Clean the surgical field for the next prompt
-        for layer_idx, weight in injected_weights:
-            remove_weights(large_model, layer_idx, weight)
-
-    steered_features = np.vstack(steered_features)
-
-    # 5. Cleanup
-    for layer_idx, weight in injected_weights:
-        remove_weights(large_model, layer_idx, weight)
-
-    # --- TRAIN LINEAR PROBES ---
-    print("\n--- Training Linear Probes ---")
-    # Split data
-    X_base_train, X_base_test, y_train, y_test = train_test_split(base_features, labels, test_size=0.2, random_state=42)
-    X_steered_train, X_steered_test, _, _ = train_test_split(steered_features, labels, test_size=0.2, random_state=42)
-
-    # Train and Evaluate Base
-    clf_base = LogisticRegression(max_iter=1000)
-    clf_base.fit(X_base_train, y_train)
-    base_acc = accuracy_score(y_test, clf_base.predict(X_base_test))
-
-    # Train and Evaluate Steered
-    clf_steered = LogisticRegression(max_iter=1000)
-    clf_steered.fit(X_steered_train, y_train)
-    steered_acc = accuracy_score(y_test, clf_steered.predict(X_steered_test))
-
-    # --- RESULTS ---
-    print("\n" + "="*40)
-    print("      END-TO-END ACCURACY REPORT")
-    print("="*40)
-    print(f"Base BERT-Large Accuracy:    {base_acc * 100:.2f}%")
-    print(f"Steered BERT-Large Accuracy: {steered_acc * 100:.2f}%")
-    print("="*40)
-    
-    shift = steered_acc - base_acc
-    if shift > 0:
-        print(f"[+] Screwdriver IMPROVED downstream accuracy by {shift * 100:.2f}%")
+    # We will load the IMDB weights to test In-Domain first
+    weights_path = "ModelScrewdriver_imdb_sentiment.pth" 
+    if os.path.exists(weights_path):
+        screwdriver.load_state_dict(torch.load(weights_path, weights_only=True))
+        screwdriver.eval()
+        print(f"[+] Successfully loaded weights from {weights_path}")
     else:
-        print(f"[-] Screwdriver DECREASED downstream accuracy by {abs(shift) * 100:.2f}%")
-        
-    from sklearn.metrics import log_loss
+        print(f"[!] Critical Error: {weights_path} not found. Train the model first.")
+        return
 
-    # --- MEASURE CONFIDENCE (LOG LOSS) ---
-    # Log loss penalizes the model for being unsure. Lower is better.
-    base_probs = clf_base.predict_proba(X_base_test)
-    steered_probs = clf_steered.predict_proba(X_steered_test)
+    # ==========================================
+    # EVALUATION CONFIGURATIONS
+    # ==========================================
+    # 1. IN-DOMAIN SANITY CHECK (Trained on this)
+    imdb_config = {
+        "task_name": "imdb_sentiment",
+        "dataset_path": "imdb",
+        "config_name": None,
+        "split": "test", # Use the test split since it trained on the train split
+        "task_label": "Analyze the sentiment of this text:",
+        "baseline_prompt": "The event occurred on a Tuesday afternoon."
+    }
 
-    base_loss = log_loss(y_test, base_probs)
-    steered_loss = log_loss(y_test, steered_probs)
+    # 2. ZERO-SHOT COUSIN CHECK (Never seen this)
+    finance_config = {
+        "task_name": "finance_sentiment",
+        "dataset_path": "FinanceMTEB/financial_phrasebank",
+        "config_name": "default",
+        "split": "train",
+        "task_label": "Analyze the sentiment of this text:",
+        "baseline_prompt": "The event occurred on a Tuesday afternoon."
+    }
 
-    print("\n" + "="*40)
-    print("      CONFIDENCE & RESOLUTION REPORT")
-    print("="*40)
-    print(f"Base Model Log Loss:    {base_loss:.4f}")
-    print(f"Steered Model Log Loss: {steered_loss:.4f}")
-    print("="*40)
+    # Run the In-Domain test first!
+   # run_accuracy_benchmark(imdb_config, screwdriver, large_model, tokenizer, harvester, device)
     
-    if steered_loss < base_loss:
-        print(f"[+] SUCCESS: The Screwdriver made the model MORE confident in its internal logic.")
-    else:
-        print(f"[-] FAILURE: The Screwdriver made the model LESS confident.")
+    # Uncomment this when you are ready to test the Zero-Shot capabilities!
+    run_accuracy_benchmark(finance_config, screwdriver, large_model, tokenizer, harvester, device)
+
 
 if __name__ == "__main__":
     main()

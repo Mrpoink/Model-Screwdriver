@@ -73,6 +73,11 @@ class ModelScrewDriver(nn.Module):
         torch.nn.init.zeros_(self.generate_B_shared.bias)
         
         self.magnitude_scalar = nn.Parameter(torch.ones(1) * 0.1)
+        self.beta = nn.Parameter(torch.tensor(0.1)) 
+        self.restore_mag = nn.Parameter(torch.tensor(0.5))
+        
+        self.register_buffer("layer_idx_base", torch.arange(num_large_layers).view(1, num_large_layers, 1))
+        self.register_buffer("chunk_idx_base", torch.arange(target_rank).view(1, 1, target_rank))
 
 
     def forward(self, A_small: torch.Tensor, B_small: torch.Tensor,
@@ -124,11 +129,33 @@ class ModelScrewDriver(nn.Module):
         L = self.num_large_layers
         R = self.target_rank
         
-        layer_idx = torch.arange(L, device=prompt_emb.device).view(1, L, 1).expand(B, L, R)
-        chunk_idx = torch.arange(R, device=prompt_emb.device).view(1, 1, R).expand(B, L, R)
+        # ==========================================
+        # CALCULATE DELTA_i (DISTANCE PENALTY)
+        # ==========================================
+        # Track the index of the last activated layer for each sequence in the batch
+        gate_flat = gate.view(B, L)
+        delta_i = torch.ones(B, L, device=prompt_emb.device)
+        last_active = torch.full((B,), -1.0, device=prompt_emb.device)
         
-        l_emb = self.layer_embedding(layer_idx) 
-        c_emb = self.chunk_embedding(chunk_idx) 
+        for l in range(L):
+            # Distance = (current layer index) - (last active layer index)
+            # If no layers have been active yet, distance defaults to 1.0
+            dist = torch.where(last_active == -1.0, torch.tensor(1.0, device=prompt_emb.device), l - last_active)
+            delta_i[:, l] = dist
+            
+            # Update the tracker ONLY if the router turned this layer on
+            is_active = gate_flat[:, l] > 0.5
+            last_active = torch.where(is_active, torch.tensor(float(l), device=prompt_emb.device), last_active)
+
+        # Apply your structural decay equation
+        exponent = torch.clamp(self.restore_mag * (delta_i - 1.0), max=10.0)
+        alpha = 1.0 - (self.beta * torch.exp(exponent))
+        
+        # Safety clamp to prevent negative alpha from inverting the weights
+        alpha = torch.clamp(alpha, min=0.0, max=1.0).view(B, L, 1, 1)
+        
+        l_emb = self.layer_embedding(self.layer_idx_base.expand(B, L, R)) 
+        c_emb = self.chunk_embedding(self.chunk_idx_base.expand(B, L, R))
         
         # Expand the exact same latent_task_vector to match the grid
         latent_expanded = latent_task_vector.view(B, 1, 1, -1).expand(B, L, R, -1)
@@ -138,9 +165,10 @@ class ModelScrewDriver(nn.Module):
         
         raw_A = self.generate_A_shared(trunk_features) 
         raw_B = self.generate_B_shared(trunk_features) 
-        
-        A_i = torch.tanh(raw_A) * torch.sigmoid(self.magnitude_scalar) * 0.5 
-        B_i = (torch.tanh(raw_B / 2.0) * 2.0).transpose(-1, -2) 
+
+        # 2. Apply alpha AS the magnitude scale, keeping tanh as the safety rail
+        A_i = torch.tanh(raw_A) * alpha * 0.5 
+        B_i = (torch.tanh(raw_B / 2.0) * alpha * 2.0).mT
         
         # .detach() secures the network so Generator MSE doesn't bleed back into the Router Head
         gate_expanded = gate.view(B, L, 1, 1)

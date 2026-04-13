@@ -4,15 +4,94 @@ from datasets import load_dataset
 # ==========================================
 # 1. THE PROMPT ENSEMBLE LEXICON
 # ==========================================
-# This provides the variation the Screwdriver needs to learn the latent *concept* # of the task, rather than memorizing a specific instruction string.
-
 PROMPT_ENSEMBLES = {
     "neutral_baseline": [
         "The event occurred on a Tuesday afternoon.",
         "A person walked down the street.",
         "The object was placed on the table.",
         "It was a standard day in the city.",
-        "The document contained several paragraphs."
+        "The document contained several paragraphs.",
+        "The sun rose at 6:00 AM today.",
+        "The chemical formula for water is H2O.",
+        "The book was 300 pages long.",
+        "The traffic light turned from green to yellow.",
+        "The company was founded in 1994.",
+        "A cat sat on the windowsill.",
+        "The store opens at nine o'clock.",
+        "The mountain peak is covered in snow.",
+        "He wore a blue shirt to the meeting.",
+        "The recipe calls for two cups of flour.",
+        "The flight was delayed by twenty minutes.",
+        "A bicycle was parked against the fence.",
+        "The computer monitor is 24 inches.",
+        "The tree lost its leaves in October.",
+        "They walked through the park for an hour.",
+        "The report is due on Friday afternoon.",
+        "The clock on the wall shows the correct time.",
+        "A glass of water sat on the nightstand.",
+        "The train arrived at the station on time.",
+        "The window was left slightly open.",
+        "The carpet is a neutral shade of gray.",
+        "The printer ran out of black ink.",
+        "She carried a leather briefcase.",
+        "The temperature stayed constant all day.",
+        "The bridge spans the entire river.",
+        "A fan was spinning in the corner.",
+        "The map shows several different routes.",
+        "The phone battery is currently at half charge.",
+        "The walls are painted a matte white.",
+        "The project consists of three distinct phases.",
+        # --- 50 NEW PROMPTS ---
+        "The wooden chair was painted blue.",
+        "A small bird flew across the yard.",
+        "The grocery store is located on Main Street.",
+        "He tied his shoes before leaving the house.",
+        "The envelope contained a single piece of paper.",
+        "The television was turned off at midnight.",
+        "A faint breeze moved the curtains.",
+        "The coffee in the mug had gone cold.",
+        "She placed her keys on the kitchen counter.",
+        "The mathematical equation was written on the board.",
+        "The sidewalk was wet from the morning rain.",
+        "A yellow taxi cab stopped at the intersection.",
+        "The library closes at eight in the evening.",
+        "He checked his watch to see the time.",
+        "The delivery truck was parked in the driveway.",
+        "The sky was completely clear of clouds.",
+        "The package arrived three days early.",
+        "A shadow stretched across the pavement.",
+        "The laptop was plugged into the wall outlet.",
+        "She wore a silver watch on her left wrist.",
+        "The garden hose was coiled neatly by the fence.",
+        "The alarm clock was set for seven in the morning.",
+        "A stack of magazines sat on the coffee table.",
+        "The streetlights turned on as it got dark.",
+        "The hallway was lined with closed doors.",
+        "He flipped the light switch on the wall.",
+        "The receipt was printed on thermal paper.",
+        "A white van drove slowly down the road.",
+        "The thermostat was set to seventy degrees.",
+        "She picked up a pen to write a note.",
+        "The calendar on the wall showed the month of May.",
+        "A pile of autumn leaves gathered in the corner.",
+        "The washing machine hummed quietly.",
+        "He folded the newspaper and placed it on the desk.",
+        "The glass door slid open automatically.",
+        "The bus stopped at the designated crosswalk.",
+        "A plain cardboard box sat in the center of the room.",
+        "The elevator doors closed slowly.",
+        "She poured a glass of orange juice.",
+        "The digital display showed a series of numbers.",
+        "The overhead lights flickered briefly.",
+        "A single star was visible in the night sky.",
+        "The metal gate was locked with a heavy padlock.",
+        "He adjusted the rearview mirror in the car.",
+        "The water in the lake was completely still.",
+        "A pair of headphones lay on the desk.",
+        "The bread was sliced into even pieces.",
+        "The flag fluttered lightly in the wind.",
+        "She zipped up her jacket before stepping outside.",
+        "The remote control was missing its battery cover."
     ],
     "sentiment": [
         "Analyze the sentiment of this text:",
@@ -22,7 +101,50 @@ PROMPT_ENSEMBLES = {
         "Classify the feeling in this review:",
         "Is the tone of this passage optimistic or pessimistic?",
         "Assess the emotional valence of the following text:",
-        "Identify the author's sentiment:"
+        "Identify the author's sentiment:",
+        # --- 50 NEW PROMPTS ---
+        "Judge the overall mood of this snippet:",
+        "Does this customer sound satisfied or disappointed?",
+        "Rate the sentiment expressed in this commentary:",
+        "Extract the underlying sentiment of this message:",
+        "Is the writer expressing praise or criticism?",
+        "Determine the emotional slant of the following words:",
+        "Categorize the sentiment of this product review:",
+        "Identify if the tone is favorable or unfavorable:",
+        "Evaluate the positivity or negativity of this statement:",
+        "What is the general vibe of this paragraph?",
+        "Assess whether this text is an endorsement or a complaint:",
+        "Read the text and classify its emotional polarity:",
+        "Does the author seem pleased or annoyed?",
+        "Detect the sentiment hidden in this passage:",
+        "Score the sentiment of this feedback:",
+        "Is this an angry response or a happy one?",
+        "Determine the subjective tone of this excerpt:",
+        "Analyze the text to find the author's true feelings:",
+        "Identify the sentiment polarity (positive/negative/neutral):",
+        "What emotional stance is taken in this article?",
+        "Does this text carry a positive, negative, or neutral sentiment?",
+        "Evaluate the writer's satisfaction level:",
+        "Classify the tone of voice used in this sentence:",
+        "Is the overall impression of this text good or bad?",
+        "Determine the emotional weight of this review:",
+        "Assess the attitude portrayed in these sentences:",
+        "Does this text reflect a good experience or a bad one?",
+        "Identify the sentiment classification of this text:",
+        "Gauge the emotional response of the writer:",
+        "Is the language used here supportive or hostile?",
+        "Analyze whether the sentiment leans positive or negative:",
+        "What is the affective tone of this short text?",
+        "Determine if this is a glowing review or a harsh critique:",
+        "Evaluate the disposition of the person writing this:",
+        "Categorize the emotional undertone of this comment:",
+        "Does the text sound encouraging or discouraging?",
+        "Identify the positive or negative leaning of this phrase:",
+        "Judge if the sentiment is toxic, friendly, or neutral:",
+        "Assess the polarity score of this text:",
+        "Is the author expressing joy or frustration here?",
+        "Determine the sentiment trajectory of this passage:",
+        "Classify the evaluative tone of this document:"
     ],
     "topic_classification": [
         "Classify the news topic of this article:",
@@ -32,7 +154,53 @@ PROMPT_ENSEMBLES = {
         "Identify the journalistic domain of this writing:",
         "Which news category does this text belong to?",
         "Determine the main topic discussed below:",
-        "Assign a thematic label to this excerpt:"
+        "Assign a thematic label to this excerpt:",
+        # --- 50 NEW PROMPTS ---
+        "What is this text primarily about?",
+        "Identify the core subject of the following paragraph:",
+        "Under which section of a website would this belong?",
+        "Classify the overarching topic of this document:",
+        "Determine the industry or field discussed here:",
+        "Is this related to sports, business, tech, or politics?",
+        "Label the topic of this short excerpt:",
+        "What broad category encompasses this text?",
+        "Assign a domain classification to this passage:",
+        "Identify the topic category for this article:",
+        "Which subject area does this content fall under?",
+        "Categorize the following text by its main subject:",
+        "Determine the central focus of this writing:",
+        "Classify this text into a standard news grouping:",
+        "What is the primary discipline mentioned here?",
+        "Identify the genre or topic of this piece:",
+        "Place this text in its correct thematic category:",
+        "Which tag best describes the content of this text?",
+        "Determine the topic domain of the given text:",
+        "Classify the main idea of this snippet:",
+        "What field of study does this text relate to?",
+        "Identify the appropriate subject label for this text:",
+        "Categorize this passage based on its content:",
+        "Determine the general theme of this article:",
+        "Is this text discussing science, entertainment, or health?",
+        "Assign a topic tag to the following sentence:",
+        "What is the primary subject matter here?",
+        "Identify the macro-topic of this text block:",
+        "Classify the sector discussed in this excerpt:",
+        "Determine the categorical bucket for this content:",
+        "Which area of interest does this text cover?",
+        "Label the primary topic of the following information:",
+        "Identify the thematic focus of this text:",
+        "Categorize the subject matter presented below:",
+        "What topic does this discussion center on?",
+        "Determine the categorical grouping of this text:",
+        "Classify this piece of text by its subject:",
+        "Which topic is most relevant to this passage?",
+        "Identify the specific domain of this content:",
+        "Assign a category to the following text sample:",
+        "What is the overarching subject of this writing?",
+        "Determine the main point of interest in this text:",
+        "Classify the nature of the topic discussed here:",
+        "Identify the primary content area of this text:",
+        "Categorize this excerpt into a topical bin:"
     ],
     "nli_entailment": [
         "Determine the logical relationship between these statements:",
@@ -42,7 +210,52 @@ PROMPT_ENSEMBLES = {
         "Are these two sentences contradictory?",
         "Assess the truth value of the hypothesis given the premise:",
         "Classify the inference between the premise and hypothesis:",
-        "Evaluate the logical consistency of these two texts:"
+        "Evaluate the logical consistency of these two texts:",
+        # --- 50 NEW PROMPTS ---
+        "Is the hypothesis supported by the premise?",
+        "Do these two statements agree, disagree, or neither?",
+        "Determine if the first sentence makes the second sentence true:",
+        "Check if there is a contradiction between the premise and hypothesis:",
+        "Does the text entail the given hypothesis?",
+        "Analyze the pair of sentences for logical entailment:",
+        "Identify if the second claim is a logical consequence of the first:",
+        "Assess whether the premise refutes the hypothesis:",
+        "Classify the relationship as entailment, neutral, or contradiction:",
+        "Evaluate if the hypothesis can be deduced from the premise:",
+        "Is it possible for both of these statements to be true at once?",
+        "Determine if the second sentence is a necessary truth given the first:",
+        "Does the provided context guarantee the hypothesis?",
+        "Check the logical alignment of the following two sentences:",
+        "Identify whether the hypothesis introduces conflicting information:",
+        "Are the premise and hypothesis mutually exclusive?",
+        "Determine if the information in sentence A proves sentence B:",
+        "Analyze the inference drawn from the premise:",
+        "Does the hypothesis logically proceed from the text provided?",
+        "Assess the validity of the hypothesis based strictly on the premise:",
+        "Classify the stance of the second text relative to the first:",
+        "Evaluate if the premise provides sufficient evidence for the hypothesis:",
+        "Is the hypothesis a false assumption based on the premise?",
+        "Determine the truth-conditional relationship between the texts:",
+        "Check if the second statement contradicts the facts of the first:",
+        "Does the first text implicitly state the second text?",
+        "Identify if the hypothesis is completely unrelated to the premise:",
+        "Analyze if the premise logically supports the hypothesis:",
+        "Determine if the hypothesis is a valid conclusion:",
+        "Assess if the two sentences are logically compatible:",
+        "Classify whether the premise confirms or denies the hypothesis:",
+        "Evaluate the deductive relationship between the two claims:",
+        "Is the hypothesis an accurate inference from the given text?",
+        "Determine if the first sentence contradicts the second:",
+        "Check if the premise entails the conclusion drawn in the hypothesis:",
+        "Does the text provide grounds for the following hypothesis?",
+        "Identify the semantic relationship: entailment, contradiction, or neutral:",
+        "Analyze if the hypothesis is a direct contradiction of the premise:",
+        "Determine if the premise makes the hypothesis impossible:",
+        "Assess whether the hypothesis is a neutral statement relative to the premise:",
+        "Classify the degree of logical agreement between the texts:",
+        "Evaluate if the premise and hypothesis describe the same event differently:",
+        "Is the second sentence logically derived from the first?",
+        "Determine if the premise falsifies the hypothesis:"
     ],
     "qa_extraction": [
         "Extract the answer to the question from the context:",
@@ -52,7 +265,327 @@ PROMPT_ENSEMBLES = {
         "Identify the phrase that answers the user's question:",
         "Use the context to answer the prompt:",
         "Extract the target information from the paragraph:",
-        "Find the solution to the question within this context:"
+        "Find the solution to the question within this context:",
+        # --- 50 NEW PROMPTS ---
+        "What specific detail answers the following question?",
+        "Retrieve the answer to this question from the text above:",
+        "Identify the exact words that answer the user's query:",
+        "Scan the text and extract the required information:",
+        "Which part of the passage contains the answer?",
+        "Find the specific sentence that addresses the question:",
+        "Extract the relevant fact to answer the prompt:",
+        "Use the provided document to answer this query:",
+        "Locate the specific data point requested in the question:",
+        "What is the answer based strictly on the text?",
+        "Identify the text segment that provides the solution:",
+        "Pull the answer directly from the given context:",
+        "Find the required information within the paragraph:",
+        "Extract the precise answer to the following question:",
+        "Where in the text is the answer to this question?",
+        "Identify the information needed to resolve the query:",
+        "Retrieve the factual response from the context provided:",
+        "Find the exact phrasing that answers the question:",
+        "Extract the correct answer from the source text:",
+        "What does the text say about the subject of the question?",
+        "Locate the specific entity that answers the prompt:",
+        "Identify the portion of the text that serves as the answer:",
+        "Find the relevant details in the text to answer this:",
+        "Extract the briefest possible answer from the context:",
+        "What is the direct answer according to the passage?",
+        "Retrieve the requested data from the provided text:",
+        "Identify the specific clause that answers the query:",
+        "Find the answer hidden in the text snippet:",
+        "Extract the appropriate response based on the reading:",
+        "Which factual detail answers the question?",
+        "Locate the exact words needed to answer the prompt:",
+        "Identify the specific information asked for in the question:",
+        "Find the answer in the text and extract it:",
+        "Extract the solution from the surrounding context:",
+        "What specific segment of the text holds the answer?",
+        "Retrieve the factual answer from the paragraph:",
+        "Identify the precise location of the answer in the text:",
+        "Find the information that corresponds to the question:",
+        "Extract the exact value or phrase that answers the query:",
+        "What is the text's answer to this specific question?",
+        "Locate the sentence containing the answer:",
+        "Identify the exact answer to the user's question:",
+        "Find the relevant fact within the provided text:",
+        "Extract the answer snippet from the document:",
+        "What part of the text answers the following question?",
+        "Retrieve the necessary information from the context:",
+        "Identify the answer to the prompt within the text:",
+        "Find the specific detail that answers the question:"
+    ],
+    "emotion": [
+        "Identify the primary emotion expressed in this text:",
+        "Does this sentence convey sadness, joy, anger, or fear?",
+        "Classify the emotional state of the speaker:",
+        "What feeling is the author conveying here?",
+        # --- 50 NEW PROMPTS ---
+        "Determine the predominant emotion in this passage:",
+        "Is the tone of this text happy, sad, angry, or surprised?",
+        "Analyze the text to find the underlying emotion:",
+        "What is the emotional subtext of this statement?",
+        "Identify if the writer is expressing frustration or delight:",
+        "Classify the specific feeling described in this excerpt:",
+        "Does this text reflect anxiety, excitement, or boredom?",
+        "Detect the primary emotional response in this text:",
+        "What emotion is most strongly felt in this writing?",
+        "Determine the affective state of the author:",
+        "Is the speaker feeling fearful or courageous?",
+        "Identify the emotional resonance of the following sentence:",
+        "Classify the mood of the text (e.g., joy, anger, sadness):",
+        "What feeling does this passage evoke?",
+        "Analyze the emotional content of this paragraph:",
+        "Determine if the text portrays grief, happiness, or anger:",
+        "Identify the core emotion driving this statement:",
+        "Classify the text into a specific emotional category:",
+        "Does this message convey a sense of panic or calm?",
+        "Extract the primary feeling expressed by the speaker:",
+        "What is the emotional tone of this specific phrase?",
+        "Determine the author's emotional condition:",
+        "Is the text expressing disgust, surprise, or joy?",
+        "Identify the dominant emotional theme here:",
+        "Classify the affect displayed in this short text:",
+        "What specific emotion is the author experiencing?",
+        "Analyze the text for signs of sadness or anger:",
+        "Determine the feeling behind these words:",
+        "Is the writer feeling hopeful or despairing?",
+        "Identify the emotional context of this excerpt:",
+        "Classify the sentiment into a distinct emotion:",
+        "What is the psychological state implied by the text?",
+        "Detect the emotion radiating from this statement:",
+        "Determine if the feeling is one of love, hate, or indifference:",
+        "Identify the raw emotion present in the writing:",
+        "Classify the speaker's emotional reaction:",
+        "Does this text show signs of irritation or contentment?",
+        "What is the primary affective tone of the passage?",
+        "Analyze the emotional intensity of this text:",
+        "Determine the specific emotion felt by the subject:",
+        "Is the text conveying a feeling of guilt or pride?",
+        "Identify the emotional signature of this document:",
+        "Classify the feeling embedded in these sentences:",
+        "What emotion is the author trying to communicate?",
+        "Detect the emotional undercurrent of the text:",
+        "Determine the primary mood expressed in the writing:",
+        "Is the speaker expressing relief or distress?",
+        "Identify the central emotion of this text snippet:"
+    ],
+    "paraphrase": [
+        "Determine if these two sentences mean the same thing:",
+        "Are these statements paraphrases of each other?",
+        "Do these two questions ask for the same information?",
+        "Check if the second sentence is a rephrasing of the first:",
+        # --- 50 NEW PROMPTS ---
+        "Is sentence B a semantic equivalent of sentence A?",
+        "Do these two texts convey the exact same idea?",
+        "Analyze if the two statements are synonymous:",
+        "Check if the second text is just a rewrite of the first:",
+        "Are these two sentences expressing identical thoughts?",
+        "Determine whether the two phrases mean exactly the same thing:",
+        "Do the following two sentences share the same core meaning?",
+        "Identify if the texts are valid paraphrases of one another:",
+        "Are these statements semantically interchangeable?",
+        "Check if the meaning is preserved between the two sentences:",
+        "Determine if sentence 1 and sentence 2 are equivalent:",
+        "Does the second sentence accurately reflect the first?",
+        "Are the core messages of these two texts identical?",
+        "Analyze whether the two strings are semantically identical:",
+        "Do these sentences communicate the same underlying fact?",
+        "Identify if the second statement is a mere rephrasing:",
+        "Are these two expressions synonymous in meaning?",
+        "Check if the two sentences translate to the same concept:",
+        "Determine if the texts are saying the exact same thing:",
+        "Is the information in sentence A identical to sentence B?",
+        "Do these two sentences describe the identical scenario?",
+        "Analyze if the two queries have the same intent:",
+        "Are these two texts semantic duplicates?",
+        "Check if the meaning of the first text matches the second:",
+        "Determine if the two statements can be used interchangeably:",
+        "Do the sentences convey equivalent semantic content?",
+        "Identify if the two phrases are conceptually the same:",
+        "Are the meanings of these two sentences perfectly aligned?",
+        "Check if rewriting the first sentence results in the second:",
+        "Determine if there is a semantic difference between the texts:",
+        "Is the second sentence a direct paraphrase of the first?",
+        "Do these two texts carry the same informational weight?",
+        "Analyze if the two statements are logical equivalents:",
+        "Are these sentences phrasing the same idea differently?",
+        "Check if the core proposition is the same in both texts:",
+        "Determine if the texts represent the same underlying meaning:",
+        "Do these two sentences share semantic equivalence?",
+        "Identify if the text pairs are valid paraphrases:",
+        "Are the implications of both sentences identical?",
+        "Check if the two statements convey the identical message:",
+        "Determine if the second text means the same as the first:",
+        "Do these phrases express the exact same sentiment and fact?",
+        "Analyze whether the sentences are meaning-equivalent:",
+        "Are these two statements just different words for the same thing?",
+        "Check if the semantic content is identical across both texts:",
+        "Determine if the two texts are exact paraphrases:"
+    ],
+    "grammar": [
+        "Is this sentence grammatically acceptable?",
+        "Check the following text for syntax errors:",
+        "Does this statement follow standard English grammar rules?",
+        "Evaluate the grammatical correctness of this sequence:",
+        # --- 50 NEW PROMPTS ---
+        "Determine if the following sentence is grammatically correct:",
+        "Identify any grammatical errors in this text:",
+        "Is the syntax of this sentence valid?",
+        "Check if the text conforms to standard grammatical rules:",
+        "Does this sentence make grammatical sense?",
+        "Evaluate whether the sentence structure is correct:",
+        "Are there any grammatical mistakes in this passage?",
+        "Determine the grammatical acceptability of the following:",
+        "Is this text written in proper English?",
+        "Check the sentence for proper grammar and syntax:",
+        "Does the following sentence violate any grammar rules?",
+        "Evaluate the syntactic correctness of this text:",
+        "Identify if the sentence is grammatically sound:",
+        "Is the grammar in this statement flawless?",
+        "Check if the word order and syntax are correct here:",
+        "Determine if the sentence is linguistically acceptable:",
+        "Does this text contain proper grammatical construction?",
+        "Evaluate the text for grammatical flaws:",
+        "Is the following sentence structurally correct?",
+        "Check if the text adheres to grammatical norms:",
+        "Does this sentence sound natural and grammatically correct?",
+        "Determine if there are syntax issues in this sentence:",
+        "Identify whether the text is grammatically proper:",
+        "Is the grammar of this phrase correct?",
+        "Check the following text for grammatical validity:",
+        "Does this sentence have standard English syntax?",
+        "Evaluate if the sentence is correctly formulated:",
+        "Is the text free of grammatical errors?",
+        "Determine if the syntax is acceptable in this sentence:",
+        "Check if the sentence construction is grammatically correct:",
+        "Does this text follow proper linguistic rules?",
+        "Evaluate the structural integrity of this sentence:",
+        "Identify if the sentence is grammatically valid:",
+        "Is the English grammar correct in this text?",
+        "Check the sentence for syntactic acceptability:",
+        "Determine if the grammar is correct in the following:",
+        "Does this sentence contain structural errors?",
+        "Evaluate if the text uses proper syntax:",
+        "Is the grammatical construction of this sentence accurate?",
+        "Check if the text is syntactically sound:",
+        "Does this sentence demonstrate correct grammar?",
+        "Determine if the text is grammatically flawless:",
+        "Identify if the phrasing is grammatically correct:",
+        "Is the sentence structured properly?",
+        "Check the following text for grammatical accuracy:",
+        "Does this text represent valid English syntax?",
+        "Evaluate the sentence for proper grammar:",
+        "Is the grammatical form of this statement correct?"
+    ],
+    "summarization": [
+        "Provide a concise summary of this text:",
+        "What is the core message of the following passage?",
+        "Condense this article into a single sentence:",
+        "Extract the main idea from this document:",
+        # --- 50 NEW PROMPTS ---
+        "Summarize the main points of this text:",
+        "Write a brief overview of the following paragraph:",
+        "What is the central theme of this document?",
+        "Distill this passage down to its key message:",
+        "Provide a short summary of the text below:",
+        "Identify the primary takeaway from this article:",
+        "Condense the following information into a brief summary:",
+        "What is the text basically saying in one sentence?",
+        "Create a condensed version of this text:",
+        "Summarize the essential details of this passage:",
+        "What is the gist of the following text?",
+        "Extract a concise summary from this document:",
+        "Provide a high-level summary of the article:",
+        "What is the main point the author is making?",
+        "Condense the core argument of this text:",
+        "Write a one-sentence summary of the following:",
+        "Identify the most important information in this text:",
+        "Summarize the content of this paragraph briefly:",
+        "What is the TL;DR of this passage?",
+        "Distill the text into a clear, short summary:",
+        "Provide an abstract for the following document:",
+        "What is the briefest way to state the text's meaning?",
+        "Condense this long text into a short snippet:",
+        "Extract the summary of the main events here:",
+        "Summarize the overall concept of the text:",
+        "What is the primary conclusion of this passage?",
+        "Create a brief synopsis of the following text:",
+        "Identify the key takeaways from this article:",
+        "Summarize the fundamental point of this text:",
+        "What is the short version of this story?",
+        "Condense the text focusing only on the main idea:",
+        "Extract a brief overview from the provided text:",
+        "Summarize the most critical points of the document:",
+        "What is the core argument summarized?",
+        "Write a short, concise summary of this passage:",
+        "Identify the overarching summary of the text:",
+        "Summarize the text in a few brief words:",
+        "What is the central idea presented here?",
+        "Condense the passage into its most basic form:",
+        "Extract the summary statement from this text:",
+        "Provide a quick summary of the following content:",
+        "What is the key message conveyed in the text?",
+        "Summarize the narrative of this document:",
+        "Distill the main points into a summary sentence:",
+        "Identify the core concept and summarize it:",
+        "Summarize the following text accurately and briefly:"
+    ],
+    "question_class": [
+        "What category does this question belong to?",
+        "Classify the type of information this question is asking for:",
+        "Is this a question about a person, location, or numeric value?",
+        "Identify the objective of this query:",
+        # --- 50 NEW PROMPTS ---
+        "What kind of entity is this question looking for?",
+        "Determine the answer type expected by this question:",
+        "Classify the intent of the following question:",
+        "Is this query asking for a date, time, or place?",
+        "Identify the broad category of this question:",
+        "What type of answer does this question require?",
+        "Categorize the following question based on its expected answer:",
+        "Determine the specific class of this interrogative sentence:",
+        "Does this question ask for a description or a fact?",
+        "Identify the semantic category of the query:",
+        "What information type is being requested here?",
+        "Classify this question (e.g., entity, abbreviation, description):",
+        "Determine the expected response type for this query:",
+        "Is the question seeking a numeric quantity or an entity?",
+        "Identify the target of the following question:",
+        "What broad class does this question fall under?",
+        "Categorize the exact nature of the information requested:",
+        "Determine the question classification for this text:",
+        "Does the query ask for a human, location, or organization?",
+        "Identify the intent classification of the question:",
+        "What sort of answer is appropriate for this query?",
+        "Classify the structural type of this question:",
+        "Determine what the user is trying to find out:",
+        "Is this a 'who', 'what', 'where', or 'when' type question?",
+        "Identify the category of the expected answer:",
+        "What classification best fits this user query?",
+        "Categorize the question into a standard taxonomy:",
+        "Determine the information extraction goal of this question:",
+        "Does this question require a definition as an answer?",
+        "Identify the question type (e.g., numeric, string, entity):",
+        "What is the grammatical category of the expected answer?",
+        "Classify the interrogative intent of this sentence:",
+        "Determine the domain of the answer sought by the question:",
+        "Is this query looking for a reason or a method?",
+        "Identify the answer classification for this question:",
+        "What type of noun is the question asking for?",
+        "Categorize the semantic intent of the query:",
+        "Determine the type of fact the question demands:",
+        "Does this question ask for a specific named entity?",
+        "Identify the core target class of the following question:",
+        "What is the expected semantic type of the answer?",
+        "Classify the question based on what it seeks to uncover:",
+        "Determine the specific category of the requested information:",
+        "Is the question asking for a measurement or a count?",
+        "Identify the question category for the following text:",
+        "What type of data is the user querying for?",
+        "Categorize the primary objective of this question:",
+        "Determine the correct answer type category for this prompt:"
     ]
 }
 
@@ -61,72 +594,79 @@ PROMPT_ENSEMBLES = {
 # ==========================================
 
 def get_imdb_texts(sample_size=10000):
-    print("      Loading IMDB (Sentiment)...")
     dataset = load_dataset("imdb", split="train")
-    # Filter for reasonable lengths to save memory/compute during extraction
-    short_reviews = [row['text'] for row in dataset if len(row['text'].split()) < 150]
-    random.shuffle(short_reviews)
-    return short_reviews[:sample_size]
+    texts = [row['text'] for row in dataset if len(row['text'].split()) < 150]
+    random.shuffle(texts)
+    return texts[:sample_size]
 
 def get_agnews_texts(sample_size=10000):
-    print("      Loading AG News (Topic)...")
     dataset = load_dataset("ag_news", split="train")
     texts = [row['text'] for row in dataset]
     random.shuffle(texts)
     return texts[:sample_size]
 
 def get_mnli_texts(sample_size=10000):
-    print("      Loading MNLI (Entailment)...")
     dataset = load_dataset("glue", "mnli", split="train")
-    # Stitch premise and hypothesis together for a single cohesive text block
     texts = [f"Premise: {row['premise']} Hypothesis: {row['hypothesis']}" for row in dataset]
     random.shuffle(texts)
     return texts[:sample_size]
 
 def get_squad_texts(sample_size=10000):
-    print("      Loading SQuAD (Question Answering)...")
     dataset = load_dataset("squad", split="train")
-    # Stitch context and question together
     texts = [f"Context: {row['context']} Question: {row['question']}" for row in dataset]
     random.shuffle(texts)
     return texts[:sample_size]
+
+# --- 5 NEW HARVESTERS ---
+def get_emotion_texts(sample_size=10000):
+    dataset = load_dataset("dair-ai/emotion", "split", split="train")
+    texts = [row['text'] for row in dataset]
+    random.shuffle(texts)
+    return texts[:sample_size]
+
+def get_qqp_texts(sample_size=10000):
+    dataset = load_dataset("glue", "qqp", split="train")
+    texts = [f"Sentence 1: {row['question1']} Sentence 2: {row['question2']}" for row in dataset]
+    random.shuffle(texts)
+    return texts[:sample_size]
+
+def get_cola_texts(sample_size=10000):
+    dataset = load_dataset("glue", "cola", split="train")
+    texts = [row['sentence'] for row in dataset]
+    random.shuffle(texts)
+    return texts[:sample_size]
+
+def get_xsum_texts(sample_size=10000):
+    dataset = load_dataset("xsum", split="train")
+    texts = [row['document'] for row in dataset if len(row['document'].split()) < 200]
+    random.shuffle(texts)
+    return texts[:sample_size]
+
+def get_trec_texts(sample_size=10000):
+    # Swapped from "trec" to "SetFit/TREC-QC" to bypass the legacy script block
+    dataset = load_dataset("SetFit/TREC-QC", split="train")
+    texts = [row['text'] for row in dataset]
+    random.shuffle(texts)
+    return texts[:sample_size]
+
 
 # ==========================================
 # 3. TASK POOL ASSEMBLER
 # ==========================================
 
 def build_master_task_pool():
-    """
-    Constructs the weighted dictionary for the massive data extraction loop.
-    You can adjust the sample_size requests based on how many shards you want to build.
-    """
     print("[*] Assembling Master Task Pool...")
     
     task_pool = {
-        "imdb_sentiment": {
-            "weight": 0.15, 
-            "data": get_imdb_texts(15000), 
-            "prompts": PROMPT_ENSEMBLES["sentiment"],
-            "neutral": PROMPT_ENSEMBLES["neutral_baseline"]
-        },
-        "ag_news": {
-            "weight": 0.15, 
-            "data": get_agnews_texts(15000), 
-            "prompts": PROMPT_ENSEMBLES["topic_classification"],
-            "neutral": PROMPT_ENSEMBLES["neutral_baseline"]
-        },
-        "glue_mnli": {
-            "weight": 0.35, 
-            "data": get_mnli_texts(35000), 
-            "prompts": PROMPT_ENSEMBLES["nli_entailment"],
-            "neutral": PROMPT_ENSEMBLES["neutral_baseline"]
-        },
-        "squad_qa": {
-            "weight": 0.35, 
-            "data": get_squad_texts(35000), 
-            "prompts": PROMPT_ENSEMBLES["qa_extraction"],
-            "neutral": PROMPT_ENSEMBLES["neutral_baseline"]
-        }
+        "imdb_sentiment": {"weight": 0.10, "data": get_imdb_texts(10100), "prompts": PROMPT_ENSEMBLES["sentiment"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "ag_news": {"weight": 0.10, "data": get_agnews_texts(10100), "prompts": PROMPT_ENSEMBLES["topic_classification"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "glue_mnli": {"weight": 0.15, "data": get_mnli_texts(15100), "prompts": PROMPT_ENSEMBLES["nli_entailment"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "squad_qa": {"weight": 0.15, "data": get_squad_texts(15100), "prompts": PROMPT_ENSEMBLES["qa_extraction"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "emotion": {"weight": 0.10, "data": get_emotion_texts(10100), "prompts": PROMPT_ENSEMBLES["emotion"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "qqp_paraphrase": {"weight": 0.10, "data": get_qqp_texts(10100), "prompts": PROMPT_ENSEMBLES["paraphrase"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "cola_grammar": {"weight": 0.10, "data": get_cola_texts(10100), "prompts": PROMPT_ENSEMBLES["grammar"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "xsum_summary": {"weight": 0.10, "data": get_xsum_texts(10100), "prompts": PROMPT_ENSEMBLES["summarization"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "trec_questions": {"weight": 0.10, "data": get_trec_texts(10100), "prompts": PROMPT_ENSEMBLES["question_class"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
     }
     
     print("[+] Task Pool Ready.")
