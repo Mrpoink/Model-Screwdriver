@@ -1,0 +1,19 @@
+{
+    "timestamp": "20260413_234632",
+    "loop_iteration": 1,
+    "training_pipeline": "imdb_sentiment",
+    "evaluation_configuration": {
+        "task_name": "tweet_emotion",
+        "dataset_path": "tweet_eval",
+        "config_name": "emotion",
+        "split": "validation",
+        "task_label": "Determine the emotion of this text:",
+        "baseline_prompt": "The event occurred on a Tuesday afternoon."
+    },
+    "metrics": {
+        "base_cluster_score": -0.030627241358160973,
+        "steered_cluster_score": -0.030612124130129814,
+        "cluster_improvement": 1.5117228031158447e-05,
+        "average_layers_altered": 3
+    }
+}

@@ -1,10 +1,10 @@
 import os
 import json
 import torch
+import time
 from datetime import datetime
 import numpy as np
 from datasets import load_dataset
-from sklearn.metrics.pairwise import paired_cosine_distances
 from sklearn.metrics import silhouette_score
 from transformers import BertModel, BertTokenizer
 
@@ -12,26 +12,24 @@ from ScrewDriver.ScrewDriver import ModelScrewDriver
 from StartDatasetBuild import main as BuildDatasetMain
 from DataExtraction.TaskVectorHarvester import Harvester
 from ScrewDriver.Tools import inject_weights, remove_weights
-from ScrewDriver.ScrewDriverTrain import main as ScrewdriverTrainMain
+from ScrewDriver.ScrewDriverTrain import start as ScrewdriverTrainMain
 
-def log_evaluation(eval_task_config, metrics, iteration, pipeline_name, log_dir="eval_logs"):
+def log_evaluation(metrics, iteration, log_dir="eval_logs"):
     """Saves the highly detailed JSON telemetry for a specific evaluation run."""
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = os.path.join(log_dir, f"loop{iteration}_Train-{pipeline_name}_Eval-{eval_task_config['task_name']}_{timestamp}.json")
+    filepath = os.path.join(log_dir, f"loop{iteration}_{timestamp}.json")
     
     log_data = {
         "timestamp": timestamp,
         "loop_iteration": iteration,
-        "training_pipeline": pipeline_name,
-        "evaluation_configuration": eval_task_config,
         "metrics": metrics
     }
     
     with open(filepath, 'w') as f:
         json.dump(log_data, f, indent=4)
 
-def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harvester, tokenizer, device, iteration, pipeline_name, eval_samples=500):
+def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harvester, tokenizer, device, iteration, model_name, eval_samples=500):
     print(f"      Running {eval_samples}-Sample ZERO-SHOT Clustering on {eval_task_config['task_name']}...")
     
     base_features = list()
@@ -83,7 +81,7 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
         # C. Inject Weights
         injected_weights = []
         for l_idx in active_layers:
-            scaled_W = delta_W_seq[l_idx] * 0.5 # Added a 0.5 dampener to prevent overshooting
+            scaled_W = delta_W_seq[l_idx]
             inject_weights(large_model, l_idx, scaled_W)
             injected_weights.append((l_idx, scaled_W))
 
@@ -116,7 +114,6 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
         "average_layers_altered": len(active_layers_snapshot)
     }
 
-    log_evaluation(eval_task_config, metrics, iteration, pipeline_name)
     return metrics
 
 def main():
@@ -140,7 +137,7 @@ def main():
     }
 
     # Your existing training pipelines (We do not touch the master data)
-    PIPELINES = ["imdb_sentiment", "ag_news_classification", "glue_sst2", "combined"]
+    model_name = "008"
     
     eval_samples = 500
 
@@ -152,52 +149,89 @@ def main():
         print(f"      STARTING MASTER LOOP {iteration} OF 20")
         print("#"*60)
         
-        for pipeline_name in PIPELINES:
-            print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {pipeline_name.upper()}\n{'='*40}")
+        iteration_metrics = {}
+        
+        iteration_metrics['iteration'] = iteration
+        iteration_metrics['eval_samples'] = eval_samples
+        
+        print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {model_name.upper()}\n{'='*40}")
+        pipe_start = time.perf_counter()
+        
+        # --- 1. BUILD DATASET (Uses your existing extraction logic) ---
+        # print(f"  [1/3] Building Dataset for {model_name}...")
+        data_start = time.perf_counter()
+        # BuildDatasetMain()
+        data_end = time.perf_counter()
+        
+        iteration_metrics['dataset build time'] = data_end-data_start
+        
+        # --- 2. TRAIN SCREWDRIVER ---
+        print(f"\n  [2/3] Training Screwdriver for {model_name}...")
+        train_start = time.perf_counter()
+        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name)
+        train_end = time.perf_counter()
+        
+        iteration_metrics['Screwdriver training time'] = train_end-train_start
+        
+        # --- 3. ZERO-SHOT EVALUATION ---
+        print(f"\n  [3/3] Evaluating Screwdriver for {model_name} on Unseen Cousins...")
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
+        large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
+        harvester = Harvester(small_model, large_model, tokenizer, device=device)
+        
+        screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=32, num_small_layers=12, num_large_layers=24).to(device)
+        weights_path = f"ModelScrewdriver_{model_name}.pth"
+        
+        # Catch file not found if training failed
+        if os.path.exists(weights_path):
+            state_dict = torch.load(weights_path, weights_only=True)
+            screwdriver.load_state_dict(state_dict)
             
-            #--- 1. BUILD DATASET (Uses your existing extraction logic) ---
-            # print(f"  [1/3] Building Dataset for {pipeline_name}...")
-            # BuildDatasetMain()
+            iteration_metrics['internal_params'] = {
+                "magnitude_scalar": float(state_dict['magnitude_scalar'].cpu()),
+                "beta": float(state_dict['beta'].cpu()),
+                "restore_mag": float(state_dict['restore_mag'].cpu())
+            }
             
-            #--- 2. TRAIN SCREWDRIVER ---
-            print(f"\n  [2/3] Training Screwdriver for {pipeline_name}...")
-            ScrewdriverTrainMain(task_name=pipeline_name, task_label=pipeline_name)
+        else:
+            print(f"      [!] Weights not found for {model_name}. Skipping evaluation.")
+            continue
             
-            # --- 3. ZERO-SHOT EVALUATION ---
-            print(f"\n  [3/3] Evaluating Screwdriver for {pipeline_name} on Unseen Cousins...")
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
-            large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
-            harvester = Harvester(small_model, large_model, tokenizer, device=device)
+        
+        screwdriver.eval()
+        
+        # Run the model against the ZERO-SHOT benchmarks
+        for eval_name, config_data in EVAL_CONFIGS.items():
             
-            screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=12, num_small_layers=12, num_large_layers=24).to(device)
-            weights_path = f"ModelScrewdriver_{pipeline_name}.pth"
+            task_config = {"task_name": eval_name, **config_data}
             
-            # Catch file not found if training failed
-            if os.path.exists(weights_path):
-                screwdriver.load_state_dict(torch.load(weights_path, weights_only=True))
-            else:
-                print(f"      [!] Weights not found for {pipeline_name}. Skipping evaluation.")
-                continue
-                
-            screwdriver.eval()
-
-            # Run the model against the ZERO-SHOT benchmarks
-            for eval_name, config_data in EVAL_CONFIGS.items():
-                task_config = {"task_name": eval_name, **config_data}
-                
-                metrics = evaluate_model(
-                    task_config, screwdriver, large_model, small_model, 
-                    harvester, tokenizer, device, iteration, pipeline_name, 
-                    eval_samples=eval_samples
-                )
-                
-                print(f"      => {eval_name} Success Rate: {metrics['success_rate_percent']:.1f}%")
-                print(f"      => Mean Convergence Shift:  {metrics['mean_convergence_shift']:+.4f}")
+            eval_start = time.perf_counter()
+            metrics = evaluate_model(
+                task_config, screwdriver, large_model, small_model, 
+                harvester, tokenizer, device, iteration, model_name, 
+                eval_samples=eval_samples
+            )
+            eval_end = time.perf_counter()
             
-            # Clean VRAM for the next pipeline
-            del small_model, large_model, harvester, screwdriver
-            torch.cuda.empty_cache()
+            metrics['time to complete'] = eval_end-eval_start
+            metrics['eval_config'] = config_data
+            
+            iteration_metrics[f'{eval_name} end stats'] = metrics
+            
+            print(f"      => {eval_name} Base Silhouette:    {metrics['base_cluster_score']:.4f}")
+            print(f"      => {eval_name} Steered Silhouette: {metrics['steered_cluster_score']:.4f}")
+            print(f"      => {eval_name} Improvement:        {metrics['cluster_improvement']:+.4f}")
+        
+        # Clean VRAM for the next pipeline
+        del small_model, large_model, harvester, screwdriver
+        torch.cuda.empty_cache()
+        
+        pipe_end = time.perf_counter()
+        
+        iteration_metrics['total time'] = pipe_end-pipe_start
+        
+        log_evaluation(iteration_metrics, iteration)
 
     print("\n[+] 20-LOOP BENCHMARK COMPLETE.")
 

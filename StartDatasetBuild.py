@@ -1,13 +1,35 @@
 import os
 import random
 import torch
+import shutil
+import time
 from transformers import BertModel, BertTokenizer
 
 from DataExtraction.TaskVectorHarvester import Harvester # Fixed import to match your filename
 from DatasetBuildData import build_master_task_pool
 
 def main(num_total_samples=50000, shard_size=2000):
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Robust folder reset
+    if os.path.exists("master_dataset"):
+        try:
+            shutil.rmtree("master_dataset")
+            # Give Windows a moment to realize the folder is gone
+            time.sleep(0.5) 
+        except PermissionError:
+            print("[!] master_dataset is locked. Cleaning contents instead...")
+            for file in os.listdir("master_dataset"):
+                file_path = os.path.join("master_dataset", file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(f"      Could not delete {file}: {e}")
+    
+    os.makedirs("master_dataset", exist_ok=True)
+    
     print(f"\n[*] Initializing Meta-Learning Harvester on {device}...")
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')

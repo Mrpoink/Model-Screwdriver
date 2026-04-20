@@ -1,0 +1,46 @@
+{
+    "timestamp": "20260418_053918",
+    "loop_iteration": 7,
+    "metrics": {
+        "iteration": 7,
+        "eval_samples": 500,
+        "dataset build time": 2.00001522898674e-07,
+        "avg_w": 0.0004026482660223278,
+        "avg_r": 0.016255622654581255,
+        "Screwdriver training time": 6131.468358899991,
+        "internal_params": {
+            "magnitude_scalar": 16.966278076171875,
+            "beta": -3.0304503440856934,
+            "restore_mag": 0.12407007813453674
+        },
+        "finance_sentiment end stats": {
+            "base_cluster_score": -0.04734846577048302,
+            "steered_cluster_score": -0.046928536146879196,
+            "cluster_improvement": 0.0004199296236038208,
+            "average_layers_altered": 3,
+            "time to complete": 26.59791739998036,
+            "eval_config": {
+                "dataset_path": "FinanceMTEB/financial_phrasebank",
+                "config_name": "default",
+                "split": "train",
+                "task_label": "Analyze the sentiment of this text:",
+                "baseline_prompt": "The event occurred on a Tuesday afternoon."
+            }
+        },
+        "tweet_emotion end stats": {
+            "base_cluster_score": -0.030642693862318993,
+            "steered_cluster_score": -0.03062254562973976,
+            "cluster_improvement": 2.0148232579231262e-05,
+            "average_layers_altered": 3,
+            "time to complete": 20.030480899993563,
+            "eval_config": {
+                "dataset_path": "tweet_eval",
+                "config_name": "emotion",
+                "split": "validation",
+                "task_label": "Determine the emotion of this text:",
+                "baseline_prompt": "The event occurred on a Tuesday afternoon."
+            }
+        },
+        "total time": 6183.6611368999875
+    }
+}

@@ -13,7 +13,7 @@ from DataExtraction.BuildDataset import ScrewdriverDataset
 torch.set_float32_matmul_precision('high')
 
 class ScrewdriverTrainer:
-    def __init__(self, model, dataloader, device, gen_lr=5e-5, r_lr=7.5e-5):
+    def __init__(self, model, dataloader, device, gen_lr=5e-3, r_lr=5e-5):
         self.model = model
         self.dataloader = dataloader
         self.device = device
@@ -24,26 +24,29 @@ class ScrewdriverTrainer:
         # Three distinct optimizers to prevent gradient bleed
         # base params is the trunk, it allows the router and generator to learn from each other without direct gradient interference
         self.base_params = list(self.model.sentence_compressor.parameters()) + \
-                           list(self.model.prompt_compressor.parameters()) + \
-                           list(self.model.shared_trunk.parameters())
+                    list(self.model.prompt_compressor.parameters()) + \
+                    list(self.model.shared_trunk.parameters()) + \
+                        [self.model.magnitude_scalar]
         
-        self.router_params = list(self.model.router_head.parameters())
+        self.router_params = list(self.model.router_head.parameters()) + \
+                    [self.model.restore_mag]
         
         self.generator_params = list(self.model.layer_embedding.parameters()) + \
                         list(self.model.chunk_embedding.parameters()) + \
                         list(self.model.generator_head.parameters()) + \
                         list(self.model.generate_A_shared.parameters()) + \
-                        list(self.model.generate_B_shared.parameters())
+                        list(self.model.generate_B_shared.parameters()) + \
+                    [self.model.beta]
                                 
                                 
         # Both optimizers update the base_params
-        self.router_optimizer = optim.Adam(self.base_params + self.router_params, lr=self.r_lr)
-        self.generator_optimizer = optim.Adam(self.base_params + self.generator_params, lr=self.gen_lr)
-        self.trunk_optimzer = optim.Adam(self.base_params, lr=min(gen_lr, r_lr) * 0.5)
+        self.router_optimizer = optim.Adam(self.router_params, lr=self.r_lr)
+        self.generator_optimizer = optim.Adam(self.generator_params, lr=self.gen_lr)
+        self.trunk_optimizer = optim.Adam(self.base_params, lr=min(gen_lr, r_lr) * 0.5)
         
         # Due to the distinct training phases, we use separate schedulers for each optimizer to allow independent LR adjustments
-        self.r_scheduler = CosineAnnealingLR(self.router_optimizer, T_max=60, eta_min=1e-7)
-        self.g_scheduler = CosineAnnealingLR(self.generator_optimizer, T_max=250, eta_min=1e-7)
+        self.r_scheduler = CosineAnnealingLR(self.router_optimizer, T_max=60, eta_min=1e-5)
+        self.g_scheduler = CosineAnnealingLR(self.generator_optimizer, T_max=350, eta_min=1e-5)
         
         # --- LOSS FUNCTIONS ---
         # Both are MSE based, but the generator's loss is computed in a custom way to handle the matrix nature of the outputs
@@ -119,18 +122,6 @@ class ScrewdriverTrainer:
         
         return F.mse_loss(sim_matrix, identity)
     
-    # def _distillation_loss(self, steered_output, target_labels):
-    #     """Forces 
-
-    #     Args:
-    #         steered_output (_type_): _description_
-    #         target_labels (_type_): _description_
-
-    #     Returns:
-    #         _type_: _description_
-    #     """
-    #     # This forces the Screwdriver to 'help' the Large Model classify better
-    #     return F.cross_entropy(steered_output, target_labels)
     
     @torch.amp.autocast('cuda', enabled=False)
     def cyclic_trace(self, A_target, A_pred, B_target, B_pred):
@@ -152,16 +143,17 @@ class ScrewdriverTrainer:
         # 2. Compute traces
         inner_prod = (torch.matmul(A_target, A_pred.mT) * torch.matmul(B_pred.mT, B_target).mT).sum(dim=(-1, -2)) 
         norm_sq_P = (torch.matmul(A_pred, A_pred.mT) * torch.matmul(B_pred.mT, B_pred).mT).sum(dim=(-1, -2))
-
-        with torch.no_grad():
-            norm_sq_T = (torch.matmul(A_target, A_target.mT) * torch.matmul(B_target.mT, B_target).mT).sum(dim=(-1, -2))
+        norm_sq_T = (torch.matmul(A_target, A_target.mT) * torch.matmul(B_target.mT, B_target).mT).sum(dim=(-1, -2))
 
         # 3. ABSOLUTE DISTANCE (No more division)
         # This mathematically equates to ||P - T||^2
         raw_mse = norm_sq_P + norm_sq_T - 2 * inner_prod
-        
+        d_large = A_target.shape[-1]
+        # raw_mse should never be negative, but floating point math is a lie.
+        stable_mse = torch.clamp(raw_mse / d_large, min=1e-7).mean()
+            
         # We drop the Cosine Loss entirely, as it causes gradient chaos at this scale.
-        return raw_mse.mean()+ 1e-6
+        return stable_mse + 1e-6
 
     def _train_router_epoch(self, tau, scaler, lamb):
         """Train exclusively the router
@@ -185,6 +177,7 @@ class ScrewdriverTrainer:
             A_small, B_small, p_emb, _, _, target_variance = [t.to(self.device, non_blocking=True) for t in batch]
             
             self.router_optimizer.zero_grad()
+            self.trunk_optimizer.zero_grad()
             
             with torch.autocast(device_type=self.device):
             
@@ -198,11 +191,17 @@ class ScrewdriverTrainer:
                 r_loss = self.router_loss_fn(gate, target_variance)
             
             gate_means = gate.mean(dim=0)
-            l1 = gate.mean()
-            balance_penalty = torch.std(gate_means) / (torch.mean(gate_means) + 1e-8)
             
             scaler.scale(r_loss).backward()
+            
+            scaler.unscale_(self.router_optimizer)
+            scaler.unscale_(self.trunk_optimizer)
+            
+            torch.nn.utils.clip_grad_norm_(self.router_params, max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.base_params, max_norm=1.0)
+            
             scaler.step(self.router_optimizer)
+            scaler.step(self.trunk_optimizer)
             scaler.update()
             
             total_r_loss += r_loss.item()
@@ -232,6 +231,7 @@ class ScrewdriverTrainer:
                 ]
             
             self.generator_optimizer.zero_grad()
+            self.trunk_optimizer.zero_grad()
             
             with torch.amp.autocast('cuda'):
                 oracle_gate = target_variance / (target_variance.max(dim=-1, keepdim=True)[0] + 1e-8)
@@ -241,7 +241,10 @@ class ScrewdriverTrainer:
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
                 
-                total_loss = gen_loss + (0.1 * ortho_loss)
+                gen_norm = torch.norm(A_pred) + torch.norm(B_pred)
+                power_loss = torch.exp(-gen_norm) # High penalty if norm is small
+
+                total_loss = gen_loss + (0.1 * ortho_loss) + (0.05 * power_loss)
                 
             scaler.scale(total_loss).backward()
             
@@ -249,12 +252,11 @@ class ScrewdriverTrainer:
             scaler.unscale_(self.generator_optimizer)
             # 2. Clip the exploding gradients
             torch.nn.utils.clip_grad_norm_(self.generator_params, max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.base_params, max_norm=1.0)
             
             scaler.step(self.generator_optimizer)
+            scaler.step(self.trunk_optimizer)
             scaler.update()
-            
-            total_gen_loss_accum += gen_loss.item()
-            total_o_loss += ortho_loss.item()
             
             total_gen_loss_accum += gen_loss.item()
             total_o_loss += ortho_loss.item()
@@ -282,9 +284,9 @@ class ScrewdriverTrainer:
         for batch in self.dataloader:
             A_small, B_small, p_emb, A_target, B_target, target_variance = [t.to(self.device, non_blocking=True) for t in batch]
             
-            self.trunk_optimzer.zero_grad()
             self.router_optimizer.zero_grad()
             self.generator_optimizer.zero_grad()
+            self.trunk_optimizer.zero_grad()
             
             with torch.amp.autocast('cuda'):
                 A_pred, B_pred, gate = self.model(A_small, B_small, p_emb, tau=tau, hard=True)
@@ -295,24 +297,27 @@ class ScrewdriverTrainer:
                 # REPLACE DENSE MATH WITH CYCLIC TRACE
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
+                gen_norm = torch.norm(A_pred) + torch.norm(B_pred)
+                power_loss = torch.exp(-gen_norm)
                 
             
             # Scale the total combined loss and backpropagate
-            total_loss = gen_loss + (0.1 * ortho_loss) + r_loss + 1e-6
+            total_loss = gen_loss + (0.1 * ortho_loss) + (r_loss) + (0.05 * power_loss)
             scaler.scale(total_loss).backward()
-            
-            # 1. Unscale BOTH optimizers
-            scaler.unscale_(self.trunk_optimzer)
-            scaler.unscale_(self.router_optimizer)
+    
+            # Clip everything
             scaler.unscale_(self.generator_optimizer)
+            scaler.unscale_(self.router_optimizer)
+            scaler.unscale_(self.trunk_optimizer)
             
-            # 2. Clip gradients for the entire model
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.generator_params, max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.router_params, max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.base_params, max_norm=1.0)
             
-            # 3. Step BOTH optimizers using the accumulated gradients
-            scaler.step(self.trunk_optimzer)
-            scaler.step(self.router_optimizer)
+            # Step ONLY the primary optimizers
             scaler.step(self.generator_optimizer)
+            scaler.step(self.router_optimizer)
+            scaler.step(self.trunk_optimizer)
             scaler.update()
             
             total_w_loss += gen_loss.item()
@@ -338,19 +343,19 @@ class ScrewdriverTrainer:
             # Fix the UnboundLocalError by referencing target_lamb
             lamb = 0.0 if epoch < 50 else target_lamb
             
-            if epoch < 5:
+            if epoch < 30:
                 phase = "ROUTER_ONLY"
                 avg_w, avg_r = self._train_router_epoch(tau, lamb=lamb, scaler=scaler)
                 self.r_scheduler.step()
                 
-            elif epoch < 10:
+            elif epoch < 90:
                 phase = "GENERATOR_ONLY"
                 avg_w, avg_r = self._train_generator_epoch(tau, scaler=scaler)
                 self.g_scheduler.step()
                 
-            elif epoch < 15:
-                self.r_scheduler = CosineAnnealingLR(self.router_optimizer, T_max=15, eta_min=1e-7)
-                self.g_scheduler = CosineAnnealingLR(self.generator_optimizer, T_max=15, eta_min=1e-7)
+            elif epoch == 90:
+                self.r_scheduler = CosineAnnealingLR(self.router_optimizer, T_max=350, eta_min=1e-7)
+                self.g_scheduler = CosineAnnealingLR(self.generator_optimizer, T_max=350, eta_min=1e-7)
                 phase = "JOINT_FINETUNE"
                 avg_w, avg_r = self._train_joint_epoch(tau=0.1, lamb=lamb, scaler=scaler, hard=False)
                 
@@ -364,11 +369,12 @@ class ScrewdriverTrainer:
                 self.g_scheduler.step()
                 
             print(f"Epoch {epoch:03d} | Phase: {phase:<14} | Generator Loss (MSE+Cos): {avg_w:.8f} | Router Loss (MSE): {avg_r:.8f}")
+        return float(avg_w), float(avg_r)
         
         
 
 
-def main(lr=5e-5, task_name="imdb_sentiment", task_label="Analyze the sentiment of this text."):
+def start(lr=5e-5, model_name="imdb_sentiment"):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     print("Loading sharded dataset...")
@@ -392,7 +398,7 @@ def main(lr=5e-5, task_name="imdb_sentiment", task_label="Analyze the sentiment 
     screwdriver = ModelScrewDriver(
         d_small=768, 
         d_large=1024, 
-        target_rank=12, 
+        target_rank=32, 
         d_prompt=768,       
         num_small_layers=12, 
         num_large_layers=24
@@ -402,10 +408,10 @@ def main(lr=5e-5, task_name="imdb_sentiment", task_label="Analyze the sentiment 
     trainer = ScrewdriverTrainer(screwdriver, dataloader, device)
     
     # Run the modular training loops
-    trainer.execute_curriculum(760)
+    avg_w, avg_r = trainer.execute_curriculum(200)
     
-    torch.save(screwdriver.state_dict(), f"ModelScrewdriver_{task_name}.pth")
-    print(f"\n[*] Successfully trained, calibrated, and saved ModelScrewdriver_{task_name}.pth")
+    torch.save(screwdriver.state_dict(), f"ModelScrewdriver_{model_name}.pth")
+    print(f"\n[*] Successfully trained, calibrated, and saved ModelScrewdriver_{model_name}.pth")
 
-if __name__ == '__main__':
-    main()
+    return float(avg_w), float(avg_r)
+    

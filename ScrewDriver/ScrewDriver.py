@@ -72,9 +72,9 @@ class ModelScrewDriver(nn.Module):
         torch.nn.init.normal_(self.generate_B_shared.weight, std=1e-4)
         torch.nn.init.zeros_(self.generate_B_shared.bias)
         
-        self.magnitude_scalar = nn.Parameter(torch.ones(1) * 0.1)
-        self.beta = nn.Parameter(torch.tensor(0.1)) 
-        self.restore_mag = nn.Parameter(torch.tensor(0.5))
+        self.magnitude_scalar = nn.Parameter(torch.ones(1)) # Start higher now
+        self.beta = nn.Parameter(torch.tensor(2.0)) # Using log-space for stability
+        self.restore_mag = nn.Parameter(torch.tensor(-0.1))
         
         self.register_buffer("layer_idx_base", torch.arange(num_large_layers).view(1, num_large_layers, 1))
         self.register_buffer("chunk_idx_base", torch.arange(target_rank).view(1, 1, target_rank))
@@ -86,10 +86,19 @@ class ModelScrewDriver(nn.Module):
         B, _, _, _ = A_small.shape
         
         # --- 1. SENSOR POOLING ---
-        A_mean, A_std, A_max = A_small.mean(dim=1).squeeze(1), A_small.std(dim=1).squeeze(1), A_small.max(dim=1)[0].squeeze(1)
-        B_mean, B_std, B_max = B_small.mean(dim=1).squeeze(2), B_small.std(dim=1).squeeze(2), B_small.max(dim=1)[0].squeeze(2)
+        with torch.amp.autocast('cuda', enabled=False):
+            A_f32 = torch.clamp(A_small.float(), min=-5.0, max=5.0)
+            B_f32 = torch.clamp(B_small.float(), min=-5.0, max=5.0)
+            
+            A_mean = A_f32.mean(dim=1).squeeze(1)
+            A_std = A_f32.std(dim=1).squeeze(1)
+            A_max = A_f32.max(dim=1)[0].squeeze(1)
+            
+            B_mean = B_f32.mean(dim=1).squeeze(2)
+            B_std = B_f32.std(dim=1).squeeze(2)
+            B_max = B_f32.max(dim=1)[0].squeeze(2)
 
-        sentence_features = torch.cat([A_mean, A_std, A_max, B_mean, B_std, B_max], dim=-1)
+            sentence_features = torch.cat([A_mean, A_std, A_max, B_mean, B_std, B_max], dim=-1).to(A_small.dtype)
 
         # --- 2. COMPRESSION & FUSION ---
         sent_feat = self.sentence_compressor(sentence_features)
@@ -108,18 +117,24 @@ class ModelScrewDriver(nn.Module):
         logits = torch.clamp(logits, min=-15.0, max=15.0)
         
         if self.training and override_gate is None:
-            U = torch.rand_like(logits)
-            gumbel_noise = -torch.log(-torch.log(U + 1e-8) + 1e-8)
-            noisy_logits = (logits + gumbel_noise) / tau 
-            y_soft = torch.sigmoid(noisy_logits)
+            # Force FP32 so 1e-8 doesn't round to 0.0 and cause log(0) = NaN
+            with torch.amp.autocast('cuda', enabled=False):
+                log_f32 = logits.float()
+                U = torch.rand_like(log_f32)
+                gumbel_noise = -torch.log(-torch.log(U + 1e-8) + 1e-8)
+                noisy_logits = (log_f32 + gumbel_noise) / tau 
+                y_soft = torch.sigmoid(noisy_logits).to(logits.dtype)
         else:
             y_soft = torch.sigmoid(logits)
+            
+        alpha = 1e-5
         
         if override_gate is not None:
             gate = override_gate
         elif hard:
             y_hard = (y_soft > 0.5).float()
             gate = y_hard - y_soft.detach() + y_soft
+            alpha = 1.0 - (torch.exp(self.restore_mag))
         else:
             gate = y_soft
 
@@ -146,13 +161,6 @@ class ModelScrewDriver(nn.Module):
             # Update the tracker ONLY if the router turned this layer on
             is_active = gate_flat[:, l] > 0.5
             last_active = torch.where(is_active, torch.tensor(float(l), device=prompt_emb.device), last_active)
-
-        # Apply your structural decay equation
-        exponent = torch.clamp(self.restore_mag * (delta_i - 1.0), max=10.0)
-        alpha = 1.0 - (self.beta * torch.exp(exponent))
-        
-        # Safety clamp to prevent negative alpha from inverting the weights
-        alpha = torch.clamp(alpha, min=0.0, max=1.0).view(B, L, 1, 1)
         
         l_emb = self.layer_embedding(self.layer_idx_base.expand(B, L, R)) 
         c_emb = self.chunk_embedding(self.chunk_idx_base.expand(B, L, R))
@@ -165,14 +173,22 @@ class ModelScrewDriver(nn.Module):
         
         raw_A = self.generate_A_shared(trunk_features) 
         raw_B = self.generate_B_shared(trunk_features) 
+        gate_expanded = gate.view(B, L, 1, 1)
 
         # 2. Apply alpha AS the magnitude scale, keeping tanh as the safety rail
-        A_i = torch.tanh(raw_A) * alpha * 0.5 
-        B_i = (torch.tanh(raw_B / 2.0) * alpha * 2.0).mT
+
+        # 2. Calculate Alpha (The Structural Decay)
+        # delta_i is the 'distance since last active layer'
+        # As delta_i increases, alpha slightly decays, then mahnitude_scalar compensates
         
-        # .detach() secures the network so Generator MSE doesn't bleed back into the Router Head
-        gate_expanded = gate.view(B, L, 1, 1)
-        A_large = A_i * gate_expanded.detach()
+
+        # 3. Generate and Apply Magnitude
+        A_i = torch.tanh(raw_A) 
+        B_i = torch.tanh(raw_B / 2.0).mT
+
+        # gate_expanded.detach() ensures the generator doesn't try to 
+        # 'cheat' by changing the router's decisions.
+        A_large = A_i * gate_expanded.detach() * alpha
         B_large = B_i
         
         return A_large, B_large, gate

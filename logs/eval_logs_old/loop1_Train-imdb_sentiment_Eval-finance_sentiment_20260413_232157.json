@@ -1,0 +1,19 @@
+{
+    "timestamp": "20260413_232157",
+    "loop_iteration": 1,
+    "training_pipeline": "imdb_sentiment",
+    "evaluation_configuration": {
+        "task_name": "finance_sentiment",
+        "dataset_path": "FinanceMTEB/financial_phrasebank",
+        "config_name": "default",
+        "split": "train",
+        "task_label": "Analyze the sentiment of this text:",
+        "baseline_prompt": "The event occurred on a Tuesday afternoon."
+    },
+    "metrics": {
+        "base_cluster_score": -0.047244030982255936,
+        "steered_cluster_score": -0.04718000814318657,
+        "cluster_improvement": 6.402283906936646e-05,
+        "average_layers_altered": 3
+    }
+}
