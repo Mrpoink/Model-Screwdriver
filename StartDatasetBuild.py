@@ -40,6 +40,9 @@ def main(num_total_samples=50000, shard_size=2000):
     TASK_POOL = build_master_task_pool()
     tasks = list(TASK_POOL.keys())
     weights = [TASK_POOL[t]["weight"] for t in tasks]
+    
+    max_available_samples = sum(len(config["data"]) for config in TASK_POOL.values())
+    run_samples = min(num_total_samples, max_available_samples)
 
     print("\n[*] Pre-calculating Oracle Causal Traces & Embeddings for all tasks...")
     task_variances = {}
@@ -63,13 +66,13 @@ def main(num_total_samples=50000, shard_size=2000):
     current_shard = []
     shard_index = 0
 
-    print(f"\n[*] Commencing Massive Weighted Extraction ({num_total_samples} samples)...")
+    print(f"\n[*] Commencing Massive Weighted Extraction ({run_samples} samples)...")
 
     # Wrap the entire main loop in inference_mode and autocast for maximum throughput
     with torch.inference_mode(), torch.autocast(device_type=device, dtype=torch.float16):
-        for i in range(1, num_total_samples + 1):
+        for i in range(1, run_samples + 1):
             if i % 50 == 0:
-                print(f"      Harvesting sample {i}/{num_total_samples}...")
+                print(f"      Harvesting sample {i}/{run_samples}...")
 
             chosen_task = random.choices(tasks, weights=weights, k=1)[0]
             task_config = TASK_POOL[chosen_task]

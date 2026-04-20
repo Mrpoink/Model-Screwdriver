@@ -6,8 +6,7 @@ torch.manual_seed(1068)
 
 class ModelScrewDriver(nn.Module):
     
-    def __init__(self, d_small: int, d_large: int, target_rank: int, d_prompt: int, 
-                 num_small_layers: int = 12, num_large_layers: int = 24):
+    def __init__(self, d_small: int, d_large: int, target_rank: int, d_prompt: int, num_large_layers: int = 24):
         super().__init__()
         
         self.d_large = d_large

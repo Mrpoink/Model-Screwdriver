@@ -137,7 +137,7 @@ def main():
     }
 
     # Your existing training pipelines (We do not touch the master data)
-    model_name = "008"
+    model_name = "009"
     
     eval_samples = 500
 
@@ -158,9 +158,9 @@ def main():
         pipe_start = time.perf_counter()
         
         # --- 1. BUILD DATASET (Uses your existing extraction logic) ---
-        # print(f"  [1/3] Building Dataset for {model_name}...")
+        print(f"  [1/3] Building Dataset for {model_name}...")
         data_start = time.perf_counter()
-        # BuildDatasetMain()
+        BuildDatasetMain()
         data_end = time.perf_counter()
         
         iteration_metrics['dataset build time'] = data_end-data_start
@@ -180,7 +180,7 @@ def main():
         large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
         harvester = Harvester(small_model, large_model, tokenizer, device=device)
         
-        screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=32, num_small_layers=12, num_large_layers=24).to(device)
+        screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=12, num_small_layers=12, num_large_layers=24).to(device)
         weights_path = f"ModelScrewdriver_{model_name}.pth"
         
         # Catch file not found if training failed

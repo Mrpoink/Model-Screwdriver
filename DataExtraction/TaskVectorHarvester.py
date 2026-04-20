@@ -34,19 +34,13 @@ class Harvester:
             layer_idx (int): layer idx for model
         """
         def _hook(module, input_tensor, output_tensor):
-            
-            ## Extract the [CLS] token (index 0) from the sequence
-            ## Shape: (Batch_Size, d_hidden)
-            x_cls = input_tensor[0][:, 0, :].detach().cpu()
-            
-            ## Handle tuple outputs if present in the architecture
+            # Capture the ENTIRE sequence
+            x_seq = input_tensor[0].detach().cpu() 
             y_raw = output_tensor[0] if isinstance(output_tensor, tuple) else output_tensor
+            y_seq = y_raw.detach().cpu()
             
-            ## Shape: (Batch_Size, d_hidden)
-            y_cls = y_raw[:, 0, :].detach().cpu()
-            
-            self.radar_activations[layer_idx]['x'].append(x_cls)
-            self.radar_activations[layer_idx]['y'].append(y_cls)
+            self.radar_activations[layer_idx]['x'].append(x_seq)
+            self.radar_activations[layer_idx]['y'].append(y_seq)
             
         return _hook
 
@@ -63,14 +57,18 @@ class Harvester:
     def _patch_hook_factory(self, layer_idx: int):
         """Physically replaces corrupted layer output with the perfect cached output."""
         def _hook(module, input_tensor, output_tensor):
-            
             clean_tensor = self.clean_activations[layer_idx].to(self.device)
             
-            ## Causal Tracing: Inject the clean cache back into the residual stream
-            if isinstance(output_tensor, tuple):
-                return (clean_tensor,) + output_tensor[1:]
+            # Clone the corrupted output so we don't mutate it in-place
+            patched_tensor = output_tensor[0].clone() if isinstance(output_tensor, tuple) else output_tensor.clone()
             
-            return clean_tensor
+            # Restore ONLY the [CLS] token (index 0)
+            patched_tensor[:, 0, :] = clean_tensor[:, 0, :]
+            
+            if isinstance(output_tensor, tuple):
+                return (patched_tensor,) + output_tensor[1:]
+            
+            return patched_tensor
         return _hook
 
     def causal_trace_variance(self, model, task_prompts: list) -> torch.Tensor:
@@ -244,7 +242,7 @@ class Harvester:
             for prompts in [base_prompts, task_prompts]:
                 for i in range(0, len(prompts), batch_size):
                     batch = prompts[i : i + batch_size]
-                    inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True).to(self.device)
+                    inputs = self.tokenizer(batch, return_tensors="pt", padding='max_length', max_length=128, truncation=True).to(self.device)
                     model(**inputs)
                 
         for hook in radar_hooks: hook.remove()
@@ -252,31 +250,47 @@ class Harvester:
         ## Forge matrices for ALL layers
         A_list, B_list = [], []
         
+        target_rank = 12 # Align this with your updated Screwdriver model parameter
+
         for layer_idx in range(num_layers):
-            
-            ## Shape: (Total_Samples, d_hidden)
             all_x = torch.cat(self.radar_activations[layer_idx]['x'], dim=0)
             all_y = torch.cat(self.radar_activations[layer_idx]['y'], dim=0)
             
             y_base_out = all_y[:num_base]
-            
             x_task_in = all_x[num_base:]
             y_task_out = all_y[num_base:]
             
-            ## Forge the LoRA matrices
-            ## v_task Shape: (Num_Task_Samples, d_hidden)
+            ## v_task Shape: (Batch, Seq_Len, d_hidden)
             v_task = y_task_out - y_base_out
             
-            ## norm_sq Shape: (Num_Task_Samples, 1)
-            norm_sq = torch.sum(x_task_in * x_task_in, dim=1, keepdim=True) + 1e-8
+            A_batch_list = []
+            B_batch_list = []
             
-            ## A Shape: (Num_Task_Samples, 1, d_hidden)
-            ## B Shape: (Num_Task_Samples, d_hidden, 1)
-            A = (x_task_in / norm_sq).unsqueeze(1).cpu()
-            B = v_task.unsqueeze(2).cpu()
-            
-            A_list.append(A)
-            B_list.append(B)
+            # Perform SVD per sample in the batch
+            for b in range(v_task.size(0)):
+                X_b = x_task_in[b] # Shape: (Seq_Len, d_hidden)
+                V_b = v_task[b]    # Shape: (Seq_Len, d_hidden)
+                
+                # Cross-covariance matrix
+                C = torch.matmul(X_b.T, V_b).float() # Force float32 for SVD stability
+                
+                # SVD to extract the dominant transformations
+                U, S, V = torch.svd(C)
+                
+                # Extract top R components
+                U_r = U[:, :target_rank]
+                S_r = S[:target_rank]
+                V_r = V[:, :target_rank]
+                
+                # Construct Rank-R matrices A and B
+                A_matrix = U_r.T # Shape: (R, d_hidden)
+                B_matrix = torch.matmul(V_r, torch.diag(S_r)) # Shape: (d_hidden, R)
+                
+                A_batch_list.append(A_matrix)
+                B_batch_list.append(B_matrix)
+
+            A_list.append(torch.stack(A_batch_list))
+            B_list.append(torch.stack(B_batch_list))
             
         ## Final Stack Shape: (Num_Task_Samples, Num_Layers, 1, d_hidden)
         A_final_batch = torch.stack(A_list, dim=1) 
