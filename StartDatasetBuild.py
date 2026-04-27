@@ -8,7 +8,7 @@ from transformers import BertModel, BertTokenizer
 from DataExtraction.TaskVectorHarvester import Harvester # Fixed import to match your filename
 from DatasetBuildData import build_master_task_pool
 
-def main(num_total_samples=50000, shard_size=2000):
+def main(num_total_samples=15000, shard_size=1500):
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
@@ -128,4 +128,4 @@ def main(num_total_samples=50000, shard_size=2000):
     print("\n[+] Massive Task-Space Extraction Complete!")
 
 if __name__ == "__main__":
-    main(num_total_samples=500000)
+    main(num_total_samples=15000)

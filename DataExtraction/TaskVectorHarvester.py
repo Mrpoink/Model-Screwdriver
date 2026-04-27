@@ -35,9 +35,9 @@ class Harvester:
         """
         def _hook(module, input_tensor, output_tensor):
             # Capture the ENTIRE sequence
-            x_seq = input_tensor[0].detach().cpu() 
+            x_seq = input_tensor[0].detach() 
             y_raw = output_tensor[0] if isinstance(output_tensor, tuple) else output_tensor
-            y_seq = y_raw.detach().cpu()
+            y_seq = y_raw.detach()
             
             self.radar_activations[layer_idx]['x'].append(x_seq)
             self.radar_activations[layer_idx]['y'].append(y_seq)
@@ -51,7 +51,7 @@ class Harvester:
             
             ## Cache the ENTIRE sequence, not just [CLS], for perfect restoration
             ## Shape: (Batch_Size, Seq_Len, d_hidden)
-            self.clean_activations[layer_idx] = y_raw.detach().cpu()
+            self.clean_activations[layer_idx] = y_raw.detach()
         return _hook
         
     def _patch_hook_factory(self, layer_idx: int):
@@ -250,7 +250,7 @@ class Harvester:
         ## Forge matrices for ALL layers
         A_list, B_list = [], []
         
-        target_rank = 12 # Align this with your updated Screwdriver model parameter
+        target_rank = 6 # Align this with your updated Screwdriver model parameter
 
         for layer_idx in range(num_layers):
             all_x = torch.cat(self.radar_activations[layer_idx]['x'], dim=0)
@@ -286,8 +286,8 @@ class Harvester:
                 A_matrix = U_r.T # Shape: (R, d_hidden)
                 B_matrix = torch.matmul(V_r, torch.diag(S_r)) # Shape: (d_hidden, R)
                 
-                A_batch_list.append(A_matrix)
-                B_batch_list.append(B_matrix)
+                A_batch_list.append(A_matrix.cpu())
+                B_batch_list.append(B_matrix.cpu())
 
             A_list.append(torch.stack(A_batch_list))
             B_list.append(torch.stack(B_batch_list))
@@ -322,7 +322,7 @@ class Harvester:
         
         with torch.no_grad():
             outputs = self.small_model(**inputs)
-            sentence_emb = outputs.pooler_output.squeeze(0).cpu()
+            sentence_emb = outputs.pooler_output.squeeze(0)
             
         return sentence_emb
     

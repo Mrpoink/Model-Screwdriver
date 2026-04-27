@@ -15,6 +15,7 @@ torch.set_float32_matmul_precision('high')
 
 class ScrewdriverTrainer(Training):
     def __init__(self, model, dataloader, device, gen_lr=5e-3, r_lr=5e-5):
+        super().__init__()
         self.model = model
         self.dataloader = dataloader
         self.device = device
@@ -92,6 +93,9 @@ class ScrewdriverTrainer(Training):
                 
                 # Direct MSE curve fitting
                 r_loss = self.router_loss_fn(gate, target_variance)
+                
+                
+                
             
             gate_means = gate.mean(dim=0)
             
@@ -196,6 +200,11 @@ class ScrewdriverTrainer(Training):
                 target_variance = target_variance / (target_variance.max(dim=-1, keepdim=True)[0] + 1e-8)
                 r_loss = self.router_loss_fn(gate, target_variance)
                 
+                # NEW: Synchronize predicted K with the actual sum of the router gates
+                
+                
+                # Combine them (scaled to prevent the K-loss from overpowering the variance map)
+                
                 # REPLACE DENSE MATH WITH CYCLIC TRACE
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
@@ -247,26 +256,26 @@ class ScrewdriverTrainer(Training):
             
             if epoch < 30:
                 phase = "ROUTER_ONLY"
-                avg_w, avg_r = self._train_router_epoch(tau, lamb=lamb, scaler=scaler)
+                avg_w, avg_r = self._train_router_epoch(tau, scaler=scaler)
                 self.r_scheduler.step()
                 
-            elif epoch < 90:
+            elif epoch < 360:
                 phase = "GENERATOR_ONLY"
                 avg_w, avg_r = self._train_generator_epoch(tau, scaler=scaler)
                 self.g_scheduler.step()
                 
-            elif epoch == 90:
+            elif epoch == 360:
                 self.r_scheduler = CosineAnnealingLR(self.router_optimizer, T_max=350, eta_min=1e-7)
                 self.g_scheduler = CosineAnnealingLR(self.generator_optimizer, T_max=350, eta_min=1e-7)
                 phase = "JOINT_FINETUNE"
-                avg_w, avg_r = self._train_joint_epoch(tau=0.1, lamb=lamb, scaler=scaler, hard=False)
+                avg_w, avg_r = self._train_joint_epoch(tau=0.1, scaler=scaler)
                 
                 # Update the LR smoothly without destroying the optimizer state
                 for param_group in self.generator_optimizer.param_groups:
                     param_group['lr'] = 1e-5
             else:
                 phase = "JOINT_FINETUNE"
-                avg_w, avg_r = self._train_joint_epoch(tau, lamb=lamb, scaler=scaler)
+                avg_w, avg_r = self._train_joint_epoch(tau, scaler=scaler)
                 self.r_scheduler.step()
                 self.g_scheduler.step()
                 
@@ -276,7 +285,7 @@ class ScrewdriverTrainer(Training):
         
 
 
-def start(model_name="imdb_sentiment"):
+def start(model_name="imdb_sentiment", target_rank=2):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     print("Loading sharded dataset...")
@@ -300,9 +309,8 @@ def start(model_name="imdb_sentiment"):
     screwdriver = ModelScrewDriver(
         d_small=768, 
         d_large=1024, 
-        target_rank=12, 
+        target_rank=target_rank, 
         d_prompt=768,       
-        num_small_layers=12, 
         num_large_layers=24
     ).to(device)
     
@@ -310,7 +318,7 @@ def start(model_name="imdb_sentiment"):
     trainer = ScrewdriverTrainer(screwdriver, dataloader, device)
     
     # Run the modular training loops
-    avg_w, avg_r = trainer.execute_curriculum(200)
+    avg_w, avg_r = trainer.execute_curriculum(720)
     
     torch.save(screwdriver.state_dict(), f"ModelScrewdriver_{model_name}.pth")
     print(f"\n[*] Successfully trained, calibrated, and saved ModelScrewdriver_{model_name}.pth")
