@@ -74,8 +74,8 @@ class ModelScrewDriver(nn.Module):
         torch.nn.init.normal_(self.generate_A_shared.weight, std=1e-5)
         torch.nn.init.zeros_(self.generate_A_shared.bias)
         
-        self.magnitude_scalar = nn.Parameter(torch.tensor(0.01)) # Start higher now
-        self.beta = nn.Parameter(torch.tensor(2.0)) # Using log-space for stability
+        self.magnitude_scalar = nn.Parameter(torch.tensor(0.01))
+        self.beta = nn.Parameter(torch.tensor(2.0))
         self.restore_mag = nn.Parameter(torch.tensor(-0.1))
         
         

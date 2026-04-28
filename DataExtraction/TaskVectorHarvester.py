@@ -272,6 +272,7 @@ class Harvester:
                 V_b = v_task[b]    # Shape: (Seq_Len, d_hidden)
                 
                 # Cross-covariance matrix
+                seq_len = X_b.size(0)
                 C = torch.matmul(X_b.T, V_b).float() # Force float32 for SVD stability
                 
                 # SVD to extract the dominant transformations
@@ -282,9 +283,11 @@ class Harvester:
                 S_r = S[:target_rank]
                 V_r = V[:, :target_rank]
                 
+                S_sqrt = torch.sqrt(S_r)
+                
                 # Construct Rank-R matrices A and B
-                A_matrix = U_r.T # Shape: (R, d_hidden)
-                B_matrix = torch.matmul(V_r, torch.diag(S_r)) # Shape: (d_hidden, R)
+                A_matrix = torch.matmul(torch.diag(S_sqrt), U_r.T) 
+                B_matrix = torch.matmul(V_r, torch.diag(S_sqrt)) 
                 
                 A_batch_list.append(A_matrix.cpu())
                 B_batch_list.append(B_matrix.cpu())

@@ -222,7 +222,7 @@ def main():
     # --- 1. BUILD DATASET (Uses your existing extraction logic) ---
     print(f"  [1/3] Building Dataset for {model_name}...")
     data_start = time.perf_counter()
-    #BuildDatasetMain()
+    BuildDatasetMain()
     data_end = time.perf_counter()
     
 
