@@ -1,0 +1,132 @@
+{
+    "timestamp": "20260429_164624",
+    "loop_iteration": 5,
+    "metrics": {
+        "iteration": 5,
+        "eval_samples": 500,
+        "dataset build time": 4.999892553314567e-07,
+        "avg_w": 0.0002968383013602703,
+        "avg_r": 0.13196151513368526,
+        "Screwdriver training time": 2589.167526899997,
+        "internal_params": {
+            "beta": 1.9200321435928345,
+            "restore_mag": -0.10251320153474808
+        },
+        "finance_sentiment end stats": {
+            "base_cluster_score": -0.04717973619699478,
+            "steered_cluster_score": -0.04713495820760727,
+            "cluster_improvement": 4.477798938751221e-05,
+            "base_ari": 0.05612957998460845,
+            "steered_ari": 0.05612957998460845,
+            "ari_improvement": 0.0,
+            "base_accuracy": 0.81,
+            "steered_accuracy": 0.81,
+            "accuracy_improvement": 0.0,
+            "base_f1": 0.7270920294176109,
+            "steered_f1": 0.7270920294176109,
+            "f1_improvement": 0.0,
+            "average_layers_altered": 3,
+            "time to complete": 498.3212140999967,
+            "eval_config": {
+                "dataset_path": "FinanceMTEB/financial_phrasebank",
+                "config_name": "default",
+                "split": "train",
+                "task_label": "Analyze the sentiment of this text:",
+                "baseline_prompt": "The event occurred on a Tuesday afternoon."
+            }
+        },
+        "tweet_emotion end stats": {
+            "base_cluster_score": -0.03060811385512352,
+            "steered_cluster_score": -0.030590852722525597,
+            "cluster_improvement": 1.726113259792328e-05,
+            "base_ari": 0.0004998751794097257,
+            "steered_ari": -0.0011292883154417495,
+            "ari_improvement": -0.0016291634948514752,
+            "base_accuracy": 0.49333333333333335,
+            "steered_accuracy": 0.49333333333333335,
+            "accuracy_improvement": 0.0,
+            "base_f1": 0.4541847041847042,
+            "steered_f1": 0.45303323937044865,
+            "f1_improvement": -0.0011514648142555428,
+            "average_layers_altered": 3,
+            "time to complete": 373.44119200001296,
+            "eval_config": {
+                "dataset_path": "tweet_eval",
+                "config_name": "emotion",
+                "split": "validation",
+                "task_label": "Determine the emotion of this text:",
+                "baseline_prompt": "The event occurred on a Tuesday afternoon."
+            }
+        },
+        "movie_sentiment end stats": {
+            "base_cluster_score": 0.0,
+            "steered_cluster_score": 0.0,
+            "cluster_improvement": 0.0,
+            "base_ari": 0.0,
+            "steered_ari": 0.0,
+            "ari_improvement": 0.0,
+            "base_accuracy": 0.0,
+            "steered_accuracy": 0.0,
+            "accuracy_improvement": 0.0,
+            "base_f1": 0.0,
+            "steered_f1": 0.0,
+            "f1_improvement": 0.0,
+            "average_layers_altered": 3,
+            "time to complete": 460.09555750001164,
+            "eval_config": {
+                "dataset_path": "rotten_tomatoes",
+                "config_name": "default",
+                "split": "validation",
+                "task_label": "Analyze the sentiment of this text:",
+                "baseline_prompt": "The window was left slightly open."
+            }
+        },
+        "subjectivity end stats": {
+            "base_cluster_score": 0.022562390193343163,
+            "steered_cluster_score": 0.022587398067116737,
+            "cluster_improvement": 2.500787377357483e-05,
+            "base_ari": -0.0050772194516290215,
+            "steered_ari": -0.0050772194516290215,
+            "ari_improvement": 0.0,
+            "base_accuracy": 0.92,
+            "steered_accuracy": 0.92,
+            "accuracy_improvement": 0.0,
+            "base_f1": 0.9198717948717949,
+            "steered_f1": 0.9198717948717949,
+            "f1_improvement": 0.0,
+            "average_layers_altered": 3,
+            "time to complete": 500.50714109999535,
+            "eval_config": {
+                "dataset_path": "SetFit/subj",
+                "config_name": "default",
+                "split": "test",
+                "task_label": "Determine if this text is objective or subjective:",
+                "baseline_prompt": "The receipt was printed on thermal paper."
+            }
+        },
+        "spam_detection end stats": {
+            "base_cluster_score": 0.04843093827366829,
+            "steered_cluster_score": 0.04837615787982941,
+            "cluster_improvement": -5.4780393838882446e-05,
+            "base_ari": 0.031921730729074074,
+            "steered_ari": 0.031921730729074074,
+            "ari_improvement": 0.0,
+            "base_accuracy": 0.94,
+            "steered_accuracy": 0.94,
+            "accuracy_improvement": 0.0,
+            "base_f1": 0.9399759903961584,
+            "steered_f1": 0.9399759903961584,
+            "f1_improvement": 0.0,
+            "average_layers_altered": 3,
+            "time to complete": 525.8853366999974,
+            "eval_config": {
+                "dataset_path": "SetFit/enron_spam",
+                "config_name": "default",
+                "split": "test",
+                "task_label": "Categorize this text as legitimate or spam:",
+                "baseline_prompt": "A stack of magazines sat on the coffee table."
+            }
+        },
+        "total time": 4953.190814300004
+    }
+}

@@ -18,11 +18,11 @@ from DataExtraction.TaskVectorHarvester import Harvester
 from ScrewDriver.Tools import inject_weights, remove_weights
 from ScrewDriver.ScrewDriverTrain import start as ScrewdriverTrainMain
 
-def log_evaluation(metrics, iteration, log_dir="eval_logs"):
+def log_evaluation(metrics, iteration, model_name, log_dir="eval_logs"):
     """Saves the highly detailed JSON telemetry for a specific evaluation run."""
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = os.path.join(log_dir, f"loop{iteration}_{timestamp}.json")
+    filepath = os.path.join(log_dir, f"{model_name}-loop{iteration}_{timestamp}.json")
     
     log_data = {
         "timestamp": timestamp,
@@ -33,7 +33,7 @@ def log_evaluation(metrics, iteration, log_dir="eval_logs"):
     with open(filepath, 'w') as f:
         json.dump(log_data, f, indent=4)
 
-def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harvester, tokenizer, device, iteration, model_name, eval_samples=500):
+def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harvester, tokenizer, device, iteration, model_name, eval_samples=1500):
     print(f"      Running {eval_samples}-Sample ZERO-SHOT Clustering on {eval_task_config['task_name']}...")
     
     base_features = list()
@@ -197,11 +197,6 @@ def main():
             "task_label": "Analyze the sentiment of this text:",
             "baseline_prompt": "The window was left slightly open."
         },
-        # "news_topic": {
-        #     "dataset_path": "SetFit/bbc-news", "config_name": "default", "split": "test",
-        #     "task_label": "Classify the news topic of this article:",
-        #     "baseline_prompt": "The bridge spans the entire river."
-        # },
         "subjectivity": {
             "dataset_path": "SetFit/subj", "config_name": "default", "split": "test",
             "task_label": "Determine if this text is objective or subjective:",
@@ -211,111 +206,150 @@ def main():
             "dataset_path": "SetFit/enron_spam", "config_name": "default", "split": "test",
             "task_label": "Categorize this text as legitimate or spam:",
             "baseline_prompt": "A stack of magazines sat on the coffee table."
+        },
+        "banking_intent": {
+            "dataset_path": "banking77", "config_name": "default", "split": "test",
+            "task_label": "Identify the customer intent in this banking query:",
+            "baseline_prompt": "The clock on the wall shows the correct time."
+        },
+        "sst2_sentiment": {
+            "dataset_path": "glue", "config_name": "sst2", "split": "validation",
+            "task_label": "Analyze the sentiment of this sentence:",
+            "baseline_prompt": "A small bird flew across the yard."
+        },
+        "tweet_irony": {
+            "dataset_path": "tweet_eval", "config_name": "irony", "split": "validation",
+            "task_label": "Determine if this text is ironic or sarcastic:",
+            "baseline_prompt": "A pair of headphones lay on the desk."
+        },
+        "tweet_hate_speech": {
+            "dataset_path": "tweet_eval", "config_name": "hate", "split": "validation",
+            "task_label": "Detect if this text contains hate speech:",
+            "baseline_prompt": "The hallway was lined with closed doors."
+        },
+        "tweet_offensive": {
+            "dataset_path": "tweet_eval", "config_name": "offensive", "split": "validation",
+            "task_label": "Determine if this text contains offensive language:",
+            "baseline_prompt": "The water in the lake was completely still."
         }
     }
 
     # Your existing training pipelines (We do not touch the master data)
-    model_name = "011"
+    model_name = 13
     
-    eval_samples = 500
+    eval_samples = 1500
     
     # --- 1. BUILD DATASET (Uses your existing extraction logic) ---
     print(f"  [1/3] Building Dataset for {model_name}...")
     data_start = time.perf_counter()
-    BuildDatasetMain()
+    #BuildDatasetMain()
     data_end = time.perf_counter()
+    
+    
     
 
     # ==========================================
     # THE MASTER GAUNTLET
     # ==========================================
-    for iteration in range(1, 12):
-        print("\n" + "#"*60)
-        print(f"      STARTING MASTER LOOP {iteration} OF 20")
-        print("#"*60)
+    for i in range(5):
         
         iteration_metrics = {}
-        
-        iteration_metrics['iteration'] = iteration
-        iteration_metrics['eval_samples'] = eval_samples
-        iteration_metrics['dataset build time'] = data_end-data_start
-        
-        print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {model_name.upper()}\n{'='*40}")
-        pipe_start = time.perf_counter()
         
         # --- 2. TRAIN SCREWDRIVER ---
         print(f"\n  [2/3] Training Screwdriver for {model_name}...")
         train_start = time.perf_counter()
-        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=iteration)
+        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=12)
         train_end = time.perf_counter()
         
-        iteration_metrics['Screwdriver training time'] = train_end-train_start
         
-        # --- 3. ZERO-SHOT EVALUATION ---
-        print(f"\n  [3/3] Evaluating Screwdriver for {model_name} on Unseen Cousins...")
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
-        large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
-        harvester = Harvester(small_model, large_model, tokenizer, device=device)
-        
-        screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=iteration, num_large_layers=24).to(device)
-        weights_path = f"ModelScrewdriver_{model_name}.pth"
-        
-        # Catch file not found if training failed
-        if os.path.exists(weights_path):
-            state_dict = torch.load(weights_path, weights_only=True)
-            screwdriver.load_state_dict(state_dict)
+        for iteration in range(1, 12):
+            print("\n" + "#"*60)
+            print(f"      STARTING MASTER LOOP {iteration} OF 20")
+            print("#"*60)
             
-            iteration_metrics['internal_params'] = {
-                "magnitude_scalar": float(state_dict['magnitude_scalar'].cpu()),
-                "beta": float(state_dict['beta'].cpu()),
-                "restore_mag": float(state_dict['restore_mag'].cpu())
-            }
             
-        else:
-            print(f"      [!] Weights not found for {model_name}. Skipping evaluation.")
-            continue
             
-        
-        screwdriver.eval()
-        
-        # Run the model against the ZERO-SHOT benchmarks
-        for eval_name, config_data in EVAL_CONFIGS.items():
+            iteration_metrics['iteration'] = iteration
+            iteration_metrics['eval_samples'] = eval_samples
+            iteration_metrics['dataset build time'] = data_end-data_start
             
-            task_config = {"task_name": eval_name, **config_data}
+            print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {model_name}\n{'='*40}")
+            pipe_start = time.perf_counter()
             
-            eval_start = time.perf_counter()
-            metrics = evaluate_model(
-                task_config, screwdriver, large_model, small_model, 
-                harvester, tokenizer, device, iteration, model_name, 
-                eval_samples=eval_samples
-            )
-            eval_end = time.perf_counter()
             
-            metrics['time to complete'] = eval_end-eval_start
-            metrics['eval_config'] = config_data
+            iteration_metrics['Screwdriver training time'] = train_end-train_start
             
-            iteration_metrics[f'{eval_name} end stats'] = metrics
+            # --- 3. ZERO-SHOT EVALUATION ---
+            print(f"\n  [3/3] Evaluating Screwdriver for {model_name} on Unseen Cousins...")
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            small_model = BertModel.from_pretrained('bert-base-uncased').to(device).eval()
+            large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
+            harvester = Harvester(small_model, large_model, tokenizer, device=device)
             
-            print(f"      => {eval_name} Base Silhouette:    {metrics['base_cluster_score']:.4f}")
-            print(f"      => {eval_name} Steered Silhouette: {metrics['steered_cluster_score']:.4f}")
-            print(f"      => {eval_name} Cluster Imprv:      {metrics['cluster_improvement']:+.4f}")
-            print(f"      --------------------------------------------------")
-            print(f"      => {eval_name} Base Accuracy:      {metrics['base_accuracy']:.2%}")
-            print(f"      => {eval_name} Steered Accuracy:   {metrics['steered_accuracy']:.2%}")
-            print(f"      => {eval_name} Acc Imprv:          {metrics['accuracy_improvement']:+.2%}\n")
-        
-        # Clean VRAM for the next pipeline
-        del small_model, large_model, harvester, screwdriver
-        torch.cuda.empty_cache()
-        
-        pipe_end = time.perf_counter()
-        
-        iteration_metrics['total time'] = pipe_end-pipe_start
-        
-        log_evaluation(iteration_metrics, iteration)
+            screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=12, num_large_layers=24).to(device)
+            weights_path = f"ModelScrewdriver_{model_name}.pth"
+            
+            # Catch file not found if training failed
+            if os.path.exists(weights_path):
+                state_dict = torch.load(weights_path, weights_only=True)
+                screwdriver.load_state_dict(state_dict)
+                
+                iteration_metrics['internal_params'] = {
+                    "beta": float(state_dict['beta'].cpu()),
+                    "restore_mag": float(state_dict['restore_mag'].cpu())
+                }
+                
+            else:
+                print(f"      [!] Weights not found for {model_name}. Skipping evaluation.")
+                continue
+                
+            
+            screwdriver.eval()
+            
+            # Run the model against the ZERO-SHOT benchmarks
+            for eval_name, config_data in EVAL_CONFIGS.items():
+                
+                try:
+                    
+                    task_config = {"task_name": eval_name, **config_data}
+                    
+                    eval_start = time.perf_counter()
+                    metrics = evaluate_model(
+                        task_config, screwdriver, large_model, small_model, 
+                        harvester, tokenizer, device, iteration, model_name, 
+                        eval_samples=eval_samples
+                    )
+                    eval_end = time.perf_counter()
+                    
+                    metrics['time to complete'] = eval_end-eval_start
+                    metrics['eval_config'] = config_data
+                    
+                    iteration_metrics[f'{eval_name} end stats'] = metrics
+                    
+                    print(f"      => {eval_name} Base Silhouette:    {metrics['base_cluster_score']:.4f}")
+                    print(f"      => {eval_name} Steered Silhouette: {metrics['steered_cluster_score']:.4f}")
+                    print(f"      => {eval_name} Cluster Imprv:      {metrics['cluster_improvement']:+.4f}")
+                    print(f"      --------------------------------------------------")
+                    print(f"      => {eval_name} Base Accuracy:      {metrics['base_accuracy']:.2%}")
+                    print(f"      => {eval_name} Steered Accuracy:   {metrics['steered_accuracy']:.2%}")
+                    print(f"      => {eval_name} Acc Imprv:          {metrics['accuracy_improvement']:+.2%}\n")
+                
+                except Exception as e:
+                    iteration_metrics[f'{eval_name} end stats'] = f"Test Failed: {e}"
+                
+            # Clean VRAM for the next pipeline
+            del small_model, large_model, harvester, screwdriver
+            torch.cuda.empty_cache()
+            
+            pipe_end = time.perf_counter()
+            
+            iteration_metrics['total time'] = pipe_end-pipe_start
+            
+            log_evaluation(iteration_metrics, iteration, model_name)
+            
+        model_name += 1
 
-    print("\n[+] 20-LOOP BENCHMARK COMPLETE.")
+        print("\n[+] 20-LOOP BENCHMARK COMPLETE.")
 
 if __name__ == "__main__":
     main()

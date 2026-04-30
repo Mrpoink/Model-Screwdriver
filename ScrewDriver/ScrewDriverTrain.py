@@ -27,8 +27,7 @@ class ScrewdriverTrainer(Training):
         # base params is the trunk, it allows the router and generator to learn from each other without direct gradient interference
         self.base_params = list(self.model.sentence_compressor.parameters()) + \
                     list(self.model.prompt_compressor.parameters()) + \
-                    list(self.model.shared_trunk.parameters()) + \
-                        [self.model.magnitude_scalar]
+                    list(self.model.shared_trunk.parameters()) 
         
         self.router_params = list(self.model.router_head.parameters()) + \
                     [self.model.restore_mag]
@@ -144,6 +143,12 @@ class ScrewdriverTrainer(Training):
                 oracle_gate = target_variance / (target_variance.max(dim=-1, keepdim=True)[0] + 1e-8)
                 A_pred, B_pred, _ = self.model(A_small, B_small, p_emb, tau=tau, hard=False, override_gate=oracle_gate)
                 
+                norm_A = torch.norm(A_target, dim=(-1, -2), keepdim=True) + 1e-8
+                norm_B = torch.norm(B_target, dim=(-1, -2), keepdim=True) + 1e-8
+
+                A_target = A_target / norm_A
+                B_target = B_target / norm_B
+                
                 # NO MORE T_pred OR T_target! The cyclic_trace handles it all invisibly.
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
@@ -200,12 +205,13 @@ class ScrewdriverTrainer(Training):
                 target_variance = target_variance / (target_variance.max(dim=-1, keepdim=True)[0] + 1e-8)
                 r_loss = self.router_loss_fn(gate, target_variance)
                 
-                # NEW: Synchronize predicted K with the actual sum of the router gates
-                
-                
-                # Combine them (scaled to prevent the K-loss from overpowering the variance map)
-                
-                # REPLACE DENSE MATH WITH CYCLIC TRACE
+                norm_A = torch.norm(A_target, dim=(-1, -2), keepdim=True) + 1e-8
+                norm_B = torch.norm(B_target, dim=(-1, -2), keepdim=True) + 1e-8
+
+                A_target = A_target / norm_A
+                B_target = B_target / norm_B
+
+                # Then call the trace
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
                 gen_norm = torch.norm(A_pred) + torch.norm(B_pred)
@@ -259,12 +265,12 @@ class ScrewdriverTrainer(Training):
                 avg_w, avg_r = self._train_router_epoch(tau, scaler=scaler)
                 self.r_scheduler.step()
                 
-            elif epoch < 360:
+            elif epoch < 250:
                 phase = "GENERATOR_ONLY"
                 avg_w, avg_r = self._train_generator_epoch(tau, scaler=scaler)
                 self.g_scheduler.step()
                 
-            elif epoch == 360:
+            elif epoch == 250:
                 self.r_scheduler = CosineAnnealingLR(self.router_optimizer, T_max=350, eta_min=1e-7)
                 self.g_scheduler = CosineAnnealingLR(self.generator_optimizer, T_max=350, eta_min=1e-7)
                 phase = "JOINT_FINETUNE"
@@ -318,7 +324,7 @@ def start(model_name="imdb_sentiment", target_rank=2):
     trainer = ScrewdriverTrainer(screwdriver, dataloader, device)
     
     # Run the modular training loops
-    avg_w, avg_r = trainer.execute_curriculum(720)
+    avg_w, avg_r = trainer.execute_curriculum(400)
     
     torch.save(screwdriver.state_dict(), f"ModelScrewdriver_{model_name}.pth")
     print(f"\n[*] Successfully trained, calibrated, and saved ModelScrewdriver_{model_name}.pth")

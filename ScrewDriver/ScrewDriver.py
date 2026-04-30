@@ -1,5 +1,7 @@
 import torch
+import math
 import torch.nn as nn
+
 import torch.nn.functional as F
 
 torch.manual_seed(1068)
@@ -68,13 +70,12 @@ class ModelScrewDriver(nn.Module):
         self.generate_B_shared = nn.Linear(1024, d_large * 1)
         
         # Initialize B with microscopic noise to anchor early loss near ~1.5
-        torch.nn.init.normal_(self.generate_B_shared.weight, std=1e-5)
+        torch.nn.init.normal_(self.generate_B_shared.weight, std=1 / math.sqrt(1024))
         torch.nn.init.zeros_(self.generate_B_shared.bias)
         
-        torch.nn.init.normal_(self.generate_A_shared.weight, std=1e-5)
+        torch.nn.init.normal_(self.generate_A_shared.weight, std=1 / math.sqrt(1024))
         torch.nn.init.zeros_(self.generate_A_shared.bias)
         
-        self.magnitude_scalar = nn.Parameter(torch.tensor(0.01))
         self.beta = nn.Parameter(torch.tensor(2.0))
         self.restore_mag = nn.Parameter(torch.tensor(-0.1))
         
@@ -90,8 +91,8 @@ class ModelScrewDriver(nn.Module):
         
         # --- 1. SENSOR POOLING ---
         with torch.amp.autocast('cuda', enabled=False):
-            A_f32 = torch.clamp(A_small.float(), max=7.5, min=-7.5)
-            B_f32 = torch.clamp(B_small.float(), max=7.5, min=-7.5)
+            A_f32 = A_small.float()
+            B_f32 = B_small.float()
             
             A_mean = A_f32.mean(dim=(1, 2))
             A_std = A_f32.std(dim=(1, 2))
@@ -117,7 +118,7 @@ class ModelScrewDriver(nn.Module):
         # ROUTER EXECUTION
         # ==========================================
         logits = self.router_head(latent_task_vector)
-        logits = torch.clamp(logits, min=-15.0, max=15.0)
+        # logits = torch.clamp(logits, min=-15.0, max=15.0)
         
         if self.training and override_gate is None:
             # Force FP32 so 1e-8 doesn't round to 0.0 and cause log(0) = NaN
@@ -138,10 +139,9 @@ class ModelScrewDriver(nn.Module):
             gate = override_gate
         elif hard:
             y_hard = (y_soft > 0.5).float()
-            gate = y_hard - y_soft.detach() + y_soft
+            gate = y_hard - y_soft + y_soft
             beta = F.softplus(self.beta)
             lamb = self.restore_mag
-            mag = self.magnitude_scalar
         else:
             gate = y_soft
 
@@ -188,15 +188,13 @@ class ModelScrewDriver(nn.Module):
         # delta_i is the 'distance since last active layer'
         # As delta_i increases, alpha slightly decays, then mahnitude_scalar compensates
         delta_expanded = delta_i.view(B, L, 1, 1)
-        alpha = (1.0 - (beta * torch.exp(lamb * (delta_expanded - 1)))) * mag
+        alpha = (1.0 - (beta * torch.exp(lamb * (delta_expanded - 1))))
 
         # 3. Generate and Apply Magnitude
-        A_i = torch.tanh(raw_A) 
+        A_i = raw_A 
         B_i = raw_B.mT
 
-        # gate_expanded.detach() ensures the generator doesn't try to 
-        # 'cheat' by changing the router's decisions.
-        A_large = A_i * gate_expanded.detach() * alpha
+        A_large = A_i * gate_expanded * alpha
         B_large = B_i
         
         return A_large, B_large, gate

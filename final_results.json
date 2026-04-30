@@ -1,0 +1,632 @@
+{
+    "version_11": {
+        "internal_parameters": [
+            {
+                "loop": 1,
+                "beta": 1.8911752700805664,
+                "restore_mag": -0.16119547188282013
+            },
+            {
+                "loop": 2,
+                "beta": 1.8958410024642944,
+                "restore_mag": -0.10175646841526031
+            },
+            {
+                "loop": 3,
+                "beta": 1.9023936986923218,
+                "restore_mag": -0.08944103121757507
+            },
+            {
+                "loop": 4,
+                "beta": 1.9301152229309082,
+                "restore_mag": -0.08065291494131088
+            },
+            {
+                "loop": 5,
+                "beta": 1.9200321435928345,
+                "restore_mag": -0.10251320153474808
+            },
+            {
+                "loop": 6,
+                "beta": 1.973815679550171,
+                "restore_mag": -0.09310948103666306
+            },
+            {
+                "loop": 7,
+                "beta": 1.9728455543518066,
+                "restore_mag": -0.0526588000357151
+            }
+        ],
+        "benchmark_statistics": {
+            "banking_intent": {
+                "accuracy": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "f1_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "ari_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                }
+            },
+            "finance_sentiment": {
+                "accuracy": {
+                    "mean_improvement": 0.0014285714285714299,
+                    "std_improvement": 0.003779644730092275,
+                    "t_statistic": 1.0000000000000002,
+                    "p_value": 0.35591768374958205,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.002654930103909714,
+                    "std_improvement": 0.007024284803203974,
+                    "t_statistic": 1.0000000000000002,
+                    "p_value": 0.35591768374958205,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "ari_score": {
+                    "mean_improvement": 3.2867507139742813e-06,
+                    "std_improvement": 8.695925010639934e-06,
+                    "t_statistic": 0.9999999999999999,
+                    "p_value": 0.3559176837495822,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                }
+            },
+            "movie_sentiment": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "spam_detection": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0004306596401890366,
+                    "std_improvement": 0.0011394183076527484,
+                    "t_statistic": 0.9999999999999999,
+                    "p_value": 0.3559176837495822,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                }
+            },
+            "sst2_sentiment": {
+                "accuracy": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "f1_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "ari_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                }
+            },
+            "subjectivity": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": -0.0003221750633039825,
+                    "std_improvement": 0.0008523950961288292,
+                    "t_statistic": -1.0,
+                    "p_value": 0.3559176837495822,
+                    "is_significant": false,
+                    "overall_result": "insignificantly negative"
+                }
+            },
+            "tweet_emotion": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": -0.00016449497346507754,
+                    "std_improvement": 0.000435212791708764,
+                    "t_statistic": -0.9999999999999999,
+                    "p_value": 0.3559176837495822,
+                    "is_significant": false,
+                    "overall_result": "insignificantly negative"
+                },
+                "ari_score": {
+                    "mean_improvement": -0.0015348852426600678,
+                    "std_improvement": 0.0033650277309217537,
+                    "t_statistic": -1.2068027272955613,
+                    "p_value": 0.27292393389237757,
+                    "is_significant": false,
+                    "overall_result": "insignificantly negative"
+                }
+            },
+            "tweet_hate_speech": {
+                "accuracy": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "f1_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "ari_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                }
+            },
+            "tweet_irony": {
+                "accuracy": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "f1_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "ari_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                }
+            },
+            "tweet_offensive": {
+                "accuracy": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "f1_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                },
+                "ari_score": {
+                    "error": "Not enough data points for a t-test (needs >= 2)."
+                }
+            }
+        },
+        "rank_statistics": {
+            "Loop_1": {
+                "mean_improvement": 0.0037169021454735995,
+                "std_improvement": 0.00831124586299378,
+                "t_statistic": 1.0,
+                "p_value": 0.37390096630005887,
+                "is_significant": false,
+                "overall_result": "insignificantly positive"
+            },
+            "Loop_2": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_3": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_4": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_5": {
+                "mean_improvement": -0.00023029296285110857,
+                "std_improvement": 0.0005149507196749126,
+                "t_statistic": -1.0,
+                "p_value": 0.37390096630005887,
+                "is_significant": false,
+                "overall_result": "insignificantly negative"
+            },
+            "Loop_6": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_7": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            }
+        }
+    },
+    "version_12": {
+        "internal_parameters": [
+            {
+                "loop": 1,
+                "beta": 1.8911752700805664,
+                "restore_mag": -0.16119547188282013
+            },
+            {
+                "loop": 2,
+                "beta": 1.8958410024642944,
+                "restore_mag": -0.10175646841526031
+            },
+            {
+                "loop": 3,
+                "beta": 1.9018679857254028,
+                "restore_mag": -0.09846095740795135
+            },
+            {
+                "loop": 4,
+                "beta": 1.9475891590118408,
+                "restore_mag": -0.09183338284492493
+            },
+            {
+                "loop": 5,
+                "beta": 1.9154713153839111,
+                "restore_mag": -0.10265729576349258
+            },
+            {
+                "loop": 6,
+                "beta": 1.9638140201568604,
+                "restore_mag": -0.09308267384767532
+            }
+        ],
+        "benchmark_statistics": {
+            "banking_intent": {
+                "accuracy": {
+                    "mean_improvement": 0.001666666666666668,
+                    "std_improvement": 0.004082482904638633,
+                    "t_statistic": 1.0,
+                    "p_value": 0.3632174676491229,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0014957264957264904,
+                    "std_improvement": 0.0036637667092910653,
+                    "t_statistic": 1.0,
+                    "p_value": 0.3632174676491229,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "ari_score": {
+                    "mean_improvement": -4.119376765618412e-05,
+                    "std_improvement": 0.004762461603828612,
+                    "t_statistic": -0.02118730180612868,
+                    "p_value": 0.9839157610129124,
+                    "is_significant": false,
+                    "overall_result": "insignificantly negative"
+                }
+            },
+            "finance_sentiment": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": -0.0007326044190595071,
+                    "std_improvement": 0.0011351432518324708,
+                    "t_statistic": -1.5808639192516054,
+                    "p_value": 0.17474966679005302,
+                    "is_significant": false,
+                    "overall_result": "insignificantly negative"
+                }
+            },
+            "movie_sentiment": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "spam_detection": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0004967033760261372,
+                    "std_improvement": 0.0007694896025367334,
+                    "t_statistic": 1.5811387454370687,
+                    "p_value": 0.17468783330566925,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                }
+            },
+            "sst2_sentiment": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 5.112422634012349e-06,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "subjectivity": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0014263298074893244,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "tweet_emotion": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 6.284565108094498e-05,
+                    "std_improvement": 0.00015393977770130528,
+                    "t_statistic": 1.0,
+                    "p_value": 0.3632174676491229,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "tweet_hate_speech": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "tweet_irony": {
+                "accuracy": {
+                    "mean_improvement": 0.003333333333333336,
+                    "std_improvement": 0.005163977794943227,
+                    "t_statistic": 1.5811388300841895,
+                    "p_value": 0.1746878142641195,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0033171979342033384,
+                    "std_improvement": 0.005146961943073656,
+                    "t_statistic": 1.5786870788013414,
+                    "p_value": 0.17524019684161213,
+                    "is_significant": false,
+                    "overall_result": "insignificantly positive"
+                },
+                "ari_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                }
+            },
+            "tweet_offensive": {
+                "accuracy": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "f1_score": {
+                    "mean_improvement": 0.0,
+                    "std_improvement": 0.0,
+                    "t_statistic": 0.0,
+                    "p_value": 1.0,
+                    "is_significant": false,
+                    "overall_result": "insignificantly neutral"
+                },
+                "ari_score": {
+                    "mean_improvement": -3.6519983357116126e-06,
+                    "std_improvement": 8.945532463986832e-06,
+                    "t_statistic": -0.9999999999999999,
+                    "p_value": 0.3632174676491228,
+                    "is_significant": false,
+                    "overall_result": "insignificantly negative"
+                }
+            }
+        },
+        "rank_statistics": {
+            "Loop_1": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_2": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_3": {
+                "mean_improvement": 0.0,
+                "std_improvement": 0.0,
+                "t_statistic": 0.0,
+                "p_value": 1.0,
+                "is_significant": false,
+                "overall_result": "insignificantly neutral"
+            },
+            "Loop_4": {
+                "mean_improvement": 0.0009498570292707953,
+                "std_improvement": 0.0030037116640169383,
+                "t_statistic": 1.0000000000000002,
+                "p_value": 0.3434363961379133,
+                "is_significant": false,
+                "overall_result": "insignificantly positive"
+            },
+            "Loop_5": {
+                "mean_improvement": 0.0009351432880844613,
+                "std_improvement": 0.0028271771166289814,
+                "t_statistic": 1.0459842475281236,
+                "p_value": 0.32284644980222105,
+                "is_significant": false,
+                "overall_result": "insignificantly positive"
+            },
+            "Loop_6": {
+                "mean_improvement": 0.0010404617312512077,
+                "std_improvement": 0.0032902288889958098,
+                "t_statistic": 1.0,
+                "p_value": 0.3434363961379136,
+                "is_significant": false,
+                "overall_result": "insignificantly positive"
+            }
+        }
+    }
+}
