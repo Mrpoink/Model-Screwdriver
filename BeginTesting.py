@@ -264,7 +264,7 @@ def main():
     # --- 1. BUILD DATASET ---
     print(f"  [1/3] Building Dataset for {model_name}...")
     data_start = time.perf_counter()
-    #BuildDatasetMain()
+    BuildDatasetMain()
     data_end = time.perf_counter()
     
     # Runs the entire pipeline 50 times to get as many samples as possible for evaluation
@@ -275,7 +275,7 @@ def main():
         # --- 2. TRAIN SCREWDRIVER ---
         print(f"\n  [2/3] Training Screwdriver for {model_name}...")
         train_start = time.perf_counter()
-        #iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=6)
+        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=6)
         train_end = time.perf_counter()
         
         # Made for us to originally iterate through each rank and see the best, however we just default to 6 here
