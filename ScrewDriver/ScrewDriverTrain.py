@@ -63,11 +63,11 @@ class ScrewdriverTrainer(Training):
         """Train exclusively the router
 
         Args:
-            tau (_type_): _temperature for Gumbel-Softmax, controlling the exploration of the router's gating decisions. Higher values lead to softer gates, while lower values push towards hard binary decisions.
-            scaler (_type_): GradScaler for mixed precision training, ensuring stable gradient updates when training the router head, which can be sensitive to the scale of gradients due to the Gumbel noise and the nature of the router's output.
+            tau (float): _temperature for Gumbel-Softmax, controlling the exploration of the router's gating decisions. Higher values lead to softer gates, while lower values push towards hard binary decisions.
+            scaler (scaler): GradScaler for mixed precision training, ensuring stable gradient updates when training the router head, which can be sensitive to the scale of gradients due to the Gumbel noise and the nature of the router's output.
 
         Returns:
-            _type_: A tuple containing the average generator loss (which is 0.0 in this phase since the generator is frozen) and the average router loss for the epoch, allowing us to track the router's learning progress independently of the generator.
+            tuple: A tuple containing the average generator loss (which is 0.0 in this phase since the generator is frozen) and the average router loss for the epoch, allowing us to track the router's learning progress independently of the generator.
         """
         # Freeze Generator, Unfreeze Router
         for p in self.generator_params: p.requires_grad_(False)
@@ -93,10 +93,6 @@ class ScrewdriverTrainer(Training):
                 # Direct MSE curve fitting
                 r_loss = self.router_loss_fn(gate, target_variance)
                 
-                
-                
-            
-            gate_means = gate.mean(dim=0)
             
             scaler.scale(r_loss).backward()
             
@@ -118,11 +114,11 @@ class ScrewdriverTrainer(Training):
         """Trains exclusively the generator portion of the model
 
         Args:
-            tau (_type_): Temperature for Gumbel-Softmax, which is set to a low value during generator training to encourage the router to make more definitive gating decisions, allowing the generator to learn under more realistic routing conditions.
-            scaler (_type_): GradScaler for mixed precision training, crucial for stabilizing the training of the generator head, which can produce large gradients due to the nature of the weight generation and the cyclic trace loss, especially in the early stages of training when the generator's outputs are far from the target.
+            tau (float): Temperature for Gumbel-Softmax, which is set to a low value during generator training to encourage the router to make more definitive gating decisions, allowing the generator to learn under more realistic routing conditions.
+            scaler (Scaler): GradScaler for mixed precision training, crucial for stabilizing the training of the generator head, which can produce large gradients due to the nature of the weight generation and the cyclic trace loss, especially in the early stages of training when the generator's outputs are far from the target.
 
         Returns:
-            _type_: A tuple containing the average generator loss for the epoch and 0.0 for the router loss (since the router is frozen in this phase), allowing us to monitor the generator's learning progress independently of the router.
+            tuple: A tuple containing the average generator loss for the epoch and 0.0 for the router loss (since the router is frozen in this phase), allowing us to monitor the generator's learning progress independently of the router.
         """
         # Freeze Router Head
         for p in self.router_params: p.requires_grad_(False)
@@ -149,7 +145,6 @@ class ScrewdriverTrainer(Training):
                 A_target = A_target / norm_A
                 B_target = B_target / norm_B
                 
-                # NO MORE T_pred OR T_target! The cyclic_trace handles it all invisibly.
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
                 
@@ -253,12 +248,9 @@ class ScrewdriverTrainer(Training):
         
         # Move scaler OUTSIDE the loop so it persists
         scaler = torch.amp.GradScaler(device='cuda')
-        target_lamb = 0.05 # Define your target sparsity penalty here
         
         for epoch in range(total_epochs):
             tau = max(0.1, 5.0 * math.exp(-0.05 * epoch))
-            # Fix the UnboundLocalError by referencing target_lamb
-            lamb = 0.0 if epoch < 50 else target_lamb
             
             if epoch < 30:
                 phase = "ROUTER_ONLY"
@@ -300,9 +292,6 @@ def start(model_name="imdb_sentiment", target_rank=2):
     # Load all lists of dicts
     all_shards = [torch.load(f, weights_only=False) for f in shard_files]
     
-    # Optional: If your ScrewdriverDataset class still expects a single list, 
-    # you can concatenate the lists flatly, or adapt it. 
-    # Flat concatenation is easiest:
     flat_data = [item for sublist in all_shards for item in sublist]
     
     dataset = ScrewdriverDataset(flat_data)
@@ -329,5 +318,6 @@ def start(model_name="imdb_sentiment", target_rank=2):
     torch.save(screwdriver.state_dict(), f"ModelScrewdriver_{model_name}.pth")
     print(f"\n[*] Successfully trained, calibrated, and saved ModelScrewdriver_{model_name}.pth")
 
+    # return values for metrics
     return float(avg_w), float(avg_r)
     

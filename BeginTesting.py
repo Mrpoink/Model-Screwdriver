@@ -19,7 +19,15 @@ from ScrewDriver.Tools import inject_weights, remove_weights
 from ScrewDriver.ScrewDriverTrain import start as ScrewdriverTrainMain
 
 def log_evaluation(metrics, iteration, model_name, log_dir="eval_logs"):
-    """Saves the highly detailed JSON telemetry for a specific evaluation run."""
+    """Saves the metrics into a json log file
+
+    Args:
+        metrics (dict): metrics to print
+        iteration (int): loop iteration for naming purposes
+        model_name (str): model name for naming purposes
+        log_dir (str, optional): directory to save file. Defaults to "eval_logs".
+    """
+    
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filepath = os.path.join(log_dir, f"{model_name}-loop{iteration}_{timestamp}.json")
@@ -33,7 +41,22 @@ def log_evaluation(metrics, iteration, model_name, log_dir="eval_logs"):
     with open(filepath, 'w') as f:
         json.dump(log_data, f, indent=4)
 
-def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harvester, tokenizer, device, iteration, model_name, eval_samples=1500):
+def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harvester, tokenizer, device, eval_samples=1000):
+    """Function to evaluated model
+
+    Args:
+        eval_task_config (dict): Configuration for test, must include eval name key with values: dataset_path, task_label, baseline_prompt
+        screwdriver (Screwdriver): Screwdriver model
+        large_model (BertModel): target model for weight change
+        small_model (BertModel): scout model for weight extraction
+        harvester (Harvester): harvester object to view internal represenations of scout model
+        tokenizer (BertTokenizer): text tokenizer
+        device (torch.device): torch.device()
+        eval_samples (int, optional): number of samples per evaluation. Defaults to 1000.
+
+    Returns:
+        Dict: metrics for all evaluations within configuration
+    """
     print(f"      Running {eval_samples}-Sample ZERO-SHOT Clustering on {eval_task_config['task_name']}...")
     
     base_features = list()
@@ -81,6 +104,7 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
                 prompt_emb, 
                 hard=False 
             )
+            
             # TOP-K ROUTING: Force the top 3 layers to open
             k_val = 3
             active_layers = torch.topk(gate.squeeze(), k=k_val).indices.tolist()
@@ -133,7 +157,7 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
     ari_base = adjusted_rand_score(labels, kmeans_base.labels_)
     ari_steered = adjusted_rand_score(labels, kmeans_steered.labels_)
 
-    # C. Linear Probing (Downstream Accuracy & F1)
+    # Linear Probing (Downstream Accuracy & F1)
     # 80/20 train/test split of our zero-shot sample to simulate downstream fine-tuning
     X_train_b, X_test_b, y_train, y_test = train_test_split(X_base, labels, test_size=0.2, random_state=1068, stratify=labels)
     X_train_s, X_test_s, _, _ = train_test_split(X_steered, labels, test_size=0.2, random_state=1068, stratify=labels)
@@ -176,9 +200,6 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    # ==========================================
-    # ZERO-SHOT EVALUATION BENCHMARKS
-    # ==========================================
     # These are the "Cousin" tasks. The Screwdriver never sees these during training.
     EVAL_CONFIGS = {
         "finance_sentiment": {
@@ -191,7 +212,6 @@ def main():
             "task_label": "Determine the emotion of this text:",
             "baseline_prompt": "The event occurred on a Tuesday afternoon."
         },
-        # --- NEW CONFIGS BELOW ---
         "movie_sentiment": {
             "dataset_path": "rotten_tomatoes", "config_name": "default", "split": "validation",
             "task_label": "Analyze the sentiment of this text:",
@@ -234,23 +254,20 @@ def main():
         }
     }
 
-    # Your existing training pipelines (We do not touch the master data)
+    ## Configuration
     model_name = 13
+    eval_samples = 1000
     
-    eval_samples = 1500
+    print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {model_name}\n{'='*40}")
+    pipe_start = time.perf_counter()
     
-    # --- 1. BUILD DATASET (Uses your existing extraction logic) ---
+    # --- 1. BUILD DATASET ---
     print(f"  [1/3] Building Dataset for {model_name}...")
     data_start = time.perf_counter()
     #BuildDatasetMain()
     data_end = time.perf_counter()
     
-    
-    
-
-    # ==========================================
-    # THE MASTER GAUNTLET
-    # ==========================================
+    # Runs the entire pipeline 50 times to get as many samples as possible for evaluation
     for i in range(5):
         
         iteration_metrics = {}
@@ -258,25 +275,19 @@ def main():
         # --- 2. TRAIN SCREWDRIVER ---
         print(f"\n  [2/3] Training Screwdriver for {model_name}...")
         train_start = time.perf_counter()
-        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=12)
+        #iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=6)
         train_end = time.perf_counter()
         
-        
-        for iteration in range(1, 12):
+        # Made for us to originally iterate through each rank and see the best, however we just default to 6 here
+        for iteration in range(1, 6):
+            
             print("\n" + "#"*60)
-            print(f"      STARTING MASTER LOOP {iteration} OF 20")
+            print(f"      STARTING MASTER LOOP {iteration} OF 6")
             print("#"*60)
-            
-            
             
             iteration_metrics['iteration'] = iteration
             iteration_metrics['eval_samples'] = eval_samples
             iteration_metrics['dataset build time'] = data_end-data_start
-            
-            print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {model_name}\n{'='*40}")
-            pipe_start = time.perf_counter()
-            
-            
             iteration_metrics['Screwdriver training time'] = train_end-train_start
             
             # --- 3. ZERO-SHOT EVALUATION ---
@@ -286,7 +297,7 @@ def main():
             large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
             harvester = Harvester(small_model, large_model, tokenizer, device=device)
             
-            screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=12, num_large_layers=24).to(device)
+            screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=6, num_large_layers=24).to(device)
             weights_path = f"ModelScrewdriver_{model_name}.pth"
             
             # Catch file not found if training failed
@@ -298,12 +309,12 @@ def main():
                     "beta": float(state_dict['beta'].cpu()),
                     "restore_mag": float(state_dict['restore_mag'].cpu())
                 }
+                print("\nSCREWDRIVER LOADED...\n")
                 
             else:
                 print(f"      [!] Weights not found for {model_name}. Skipping evaluation.")
                 continue
                 
-            
             screwdriver.eval()
             
             # Run the model against the ZERO-SHOT benchmarks
@@ -316,7 +327,7 @@ def main():
                     eval_start = time.perf_counter()
                     metrics = evaluate_model(
                         task_config, screwdriver, large_model, small_model, 
-                        harvester, tokenizer, device, iteration, model_name, 
+                        harvester, tokenizer, device, 
                         eval_samples=eval_samples
                     )
                     eval_end = time.perf_counter()
@@ -336,20 +347,23 @@ def main():
                 
                 except Exception as e:
                     iteration_metrics[f'{eval_name} end stats'] = f"Test Failed: {e}"
+                    print(f"Test failed: {e}")
                 
             # Clean VRAM for the next pipeline
             del small_model, large_model, harvester, screwdriver
             torch.cuda.empty_cache()
             
+            # For full pipeline time, go to last and start subtracting
             pipe_end = time.perf_counter()
             
             iteration_metrics['total time'] = pipe_end-pipe_start
             
             log_evaluation(iteration_metrics, iteration, model_name)
-            
+        
+        # To prevent cross model evaluations
         model_name += 1
 
-        print("\n[+] 20-LOOP BENCHMARK COMPLETE.")
+    print("\n[+] 50-LOOP BENCHMARK COMPLETE.")
 
 if __name__ == "__main__":
     main()

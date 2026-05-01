@@ -250,7 +250,7 @@ class Harvester:
         ## Forge matrices for ALL layers
         A_list, B_list = [], []
         
-        target_rank = 6 # Align this with your updated Screwdriver model parameter
+        target_rank = 6
 
         for layer_idx in range(num_layers):
             all_x = torch.cat(self.radar_activations[layer_idx]['x'], dim=0)
@@ -333,8 +333,7 @@ class Harvester:
         """
         Finds the exact matrix shift required to move from 'Neutral' to 'Task-Active'.
         """
-        # This calls your existing extraction logic but uses a contrastive pair
-        # instead of a singular prompt.
+        
         A_large, B_large, _ = self.extract_task_matrices(
             model, 
             [f"{neutral_prompt} {text_sample}"], 
@@ -360,5 +359,5 @@ class Harvester:
             # The Target is the 'Cognitive Shift' required to care about the task
             task_vector = (out_task - out_neutral).squeeze(0)
             
-            # Normalize to keep gradients stable on your 5060
+            # Normalize to keep gradients stable on 5060
             return task_vector / (torch.norm(task_vector) + 1e-8)

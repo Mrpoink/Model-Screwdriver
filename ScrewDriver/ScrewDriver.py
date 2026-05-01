@@ -111,14 +111,13 @@ class ModelScrewDriver(nn.Module):
         fused_context = torch.cat([sent_feat, prompt_feat], dim=-1)
         
         # --- 3. THE SHARED TRUNK ---
-        # Shape: (Batch, 1024) - This vector now dictates BOTH routing and generation
+        # Shape: (Batch, 1024)
         latent_task_vector = self.shared_trunk(fused_context) 
 
         # ==========================================
         # ROUTER EXECUTION
         # ==========================================
         logits = self.router_head(latent_task_vector)
-        # logits = torch.clamp(logits, min=-15.0, max=15.0)
         
         if self.training and override_gate is None:
             # Force FP32 so 1e-8 doesn't round to 0.0 and cause log(0) = NaN
@@ -133,7 +132,6 @@ class ModelScrewDriver(nn.Module):
             
         beta = 0
         lamb = 0
-        mag = 1
         
         if override_gate is not None:
             gate = override_gate
@@ -182,7 +180,6 @@ class ModelScrewDriver(nn.Module):
         raw_B = self.generate_B_shared(trunk_features) 
         gate_expanded = gate.view(B, L, 1, 1)
 
-        # 2. Apply alpha AS the magnitude scale, keeping tanh as the safety rail
 
         # 2. Calculate Alpha (The Structural Decay)
         # delta_i is the 'distance since last active layer'

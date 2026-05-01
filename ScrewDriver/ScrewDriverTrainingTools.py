@@ -43,7 +43,6 @@ class TrainingTools(nn.Module):
         # 1. Neutral: "The event occurred on a Tuesday afternoon. [Text]"
         # 2. Active: "Analyze the sentiment of this text: [Text]"
         
-        # We reuse your existing logic but specifically for the Task-Neutral gap
         A_large, B_large, _ = self.extract_task_matrices(
             model, 
             [neutral_prompt + " " + text_sample], 
@@ -103,6 +102,7 @@ class TrainingTools(nn.Module):
         # This mathematically equates to ||P - T||^2
         raw_mse = norm_sq_P + norm_sq_T - 2 * inner_prod
         d_large = A_target.shape[-1]
+        
         # raw_mse should never be negative, but floating point math is a lie.
         stable_mse = torch.clamp(raw_mse / d_large, min=1e-7).mean()
             

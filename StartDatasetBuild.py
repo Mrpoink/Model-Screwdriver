@@ -8,27 +8,27 @@ from transformers import BertModel, BertTokenizer
 from DataExtraction.TaskVectorHarvester import Harvester # Fixed import to match your filename
 from DatasetBuildData import build_master_task_pool
 
-def main(num_total_samples=15000, shard_size=1500):
+def main(model_name, num_total_samples=15000, shard_size=1500):
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # Robust folder reset
-    if os.path.exists("master_dataset"):
+    if os.path.exists(f"master_dataset{model_name}"):
         try:
-            shutil.rmtree("master_dataset")
+            shutil.rmtree(f"master_dataset{model_name}")
             # Give Windows a moment to realize the folder is gone
             time.sleep(0.5) 
         except PermissionError:
             print("[!] master_dataset is locked. Cleaning contents instead...")
-            for file in os.listdir("master_dataset"):
-                file_path = os.path.join("master_dataset", file)
+            for file in os.listdir(f"master_dataset{model_name}"):
+                file_path = os.path.join(f"master_dataset{model_name}", file)
                 try:
                     if os.path.isfile(file_path):
                         os.unlink(file_path)
                 except Exception as e:
                     print(f"      Could not delete {file}: {e}")
     
-    os.makedirs("master_dataset", exist_ok=True)
+    os.makedirs(f"master_dataset{model_name}", exist_ok=True)
     
     print(f"\n[*] Initializing Meta-Learning Harvester on {device}...")
 
