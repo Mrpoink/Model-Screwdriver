@@ -128,7 +128,7 @@ class ScrewdriverTrainer(Training):
         total_gen_loss_accum, total_o_loss = 0.0, 0.0
         
         for batch in self.dataloader:
-            A_small, B_small, p_emb, A_target, B_target, target_variance = [
+            A_small, B_small, p_emb, A_target, B_target, target_variance, T_lda = [
                     t.to(self.device, non_blocking=True) for t in batch
                 ]
             
@@ -148,10 +148,12 @@ class ScrewdriverTrainer(Training):
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
                 
+                lda_loss = self._lda_alignment_loss(A_pred, T_lda)
+                
                 gen_norm = torch.norm(A_pred) + torch.norm(B_pred)
                 power_loss = torch.exp(-gen_norm) # High penalty if norm is small
 
-                total_loss = gen_loss + (0.1 * ortho_loss) + (0.05 * power_loss)
+                total_loss = gen_loss + (0.1 * ortho_loss) + (0.1 * lda_loss) + (0.05 * power_loss)
                 
             scaler.scale(total_loss).backward()
             
@@ -188,7 +190,9 @@ class ScrewdriverTrainer(Training):
         total_w_loss, total_r_loss = 0.0, 0.0
         
         for batch in self.dataloader:
-            A_small, B_small, p_emb, A_target, B_target, target_variance = [t.to(self.device, non_blocking=True) for t in batch]
+            A_small, B_small, p_emb, A_target, B_target, target_variance, T_lda = [
+                    t.to(self.device, non_blocking=True) for t in batch
+                ]
             
             self.router_optimizer.zero_grad()
             self.generator_optimizer.zero_grad()
@@ -209,12 +213,15 @@ class ScrewdriverTrainer(Training):
                 # Then call the trace
                 gen_loss = self.cyclic_trace(A_target, A_pred, B_target, B_pred)
                 ortho_loss = self._orthogonal_penalty(A_pred)
+                
+                lda_loss = self._lda_alignment_loss(A_pred, T_lda)
+                                                    
                 gen_norm = torch.norm(A_pred) + torch.norm(B_pred)
                 power_loss = torch.exp(-gen_norm)
                 
             
             # Scale the total combined loss and backpropagate
-            total_loss = gen_loss + (0.1 * ortho_loss) + (r_loss) + (0.05 * power_loss)
+            total_loss = gen_loss + (0.1 * ortho_loss) + (0.1 * lda_loss) + (r_loss) + (0.05 * power_loss)
             scaler.scale(total_loss).backward()
     
             # Clip everything

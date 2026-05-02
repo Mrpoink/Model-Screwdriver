@@ -593,62 +593,68 @@ PROMPT_ENSEMBLES = {
 # 2. RAW TEXT HARVESTERS
 # ==========================================
 
-def get_imdb_texts(sample_size=10000):
+def get_imdb_data(sample_size=10000):
     dataset = load_dataset("imdb", split="train")
-    texts = [row['text'] for row in dataset if len(row['text'].split()) < 150]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # IMDB labels: 0 (neg), 1 (pos)
+    data = [(row['text'], row['label']) for row in dataset if len(row['text'].split()) < 150]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_agnews_texts(sample_size=10000):
+def get_agnews_data(sample_size=10000):
     dataset = load_dataset("ag_news", split="train")
-    texts = [row['text'] for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # AG News labels: 0-3 (World, Sports, Business, Sci/Tech)
+    data = [(row['text'], row['label']) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_mnli_texts(sample_size=10000):
+def get_mnli_data(sample_size=10000):
     dataset = load_dataset("glue", "mnli", split="train")
-    texts = [f"Premise: {row['premise']} Hypothesis: {row['hypothesis']}" for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # MNLI labels: 0 (entailment), 1 (neutral), 2 (contradiction)
+    data = [(f"Premise: {row['premise']} Hypothesis: {row['hypothesis']}", row['label']) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_squad_texts(sample_size=10000):
+def get_squad_data(sample_size=10000):
     dataset = load_dataset("squad", split="train")
-    texts = [f"Context: {row['context']} Question: {row['question']}" for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # SQuAD is generative. Assign -1 so the Harvester skips LDA for this task.
+    data = [(f"Context: {row['context']} Question: {row['question']}", -1) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
-# --- 5 NEW HARVESTERS ---
-def get_emotion_texts(sample_size=10000):
+def get_emotion_data(sample_size=10000):
     dataset = load_dataset("dair-ai/emotion", "split", split="train")
-    texts = [row['text'] for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # Emotion labels: 0-5 (sadness, joy, love, anger, fear, surprise)
+    data = [(row['text'], row['label']) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_qqp_texts(sample_size=10000):
+def get_qqp_data(sample_size=10000):
     dataset = load_dataset("glue", "qqp", split="train")
-    texts = [f"Sentence 1: {row['question1']} Sentence 2: {row['question2']}" for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # QQP labels: 0 (not duplicate), 1 (duplicate)
+    data = [(f"Sentence 1: {row['question1']} Sentence 2: {row['question2']}", row['label']) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_cola_texts(sample_size=10000):
+def get_cola_data(sample_size=10000):
     dataset = load_dataset("glue", "cola", split="train")
-    texts = [row['sentence'] for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # CoLA labels: 0 (unacceptable), 1 (acceptable)
+    data = [(row['sentence'], row['label']) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_xsum_texts(sample_size=10000):
+def get_xsum_data(sample_size=10000):
     dataset = load_dataset("xsum", split="train")
-    texts = [row['document'] for row in dataset if len(row['document'].split()) < 200]
-    random.shuffle(texts)
-    return texts[:sample_size]
+    # XSum is abstractive summarization. Assign -1.
+    data = [(row['document'], -1) for row in dataset if len(row['document'].split()) < 200]
+    random.shuffle(data)
+    return data[:sample_size]
 
-def get_trec_texts(sample_size=10000):
-    # Swapped from "trec" to "SetFit/TREC-QC" to bypass the legacy script block
+def get_trec_data(sample_size=10000):
     dataset = load_dataset("SetFit/TREC-QC", split="train")
-    texts = [row['text'] for row in dataset]
-    random.shuffle(texts)
-    return texts[:sample_size]
-
+    # TREC labels: 0-5 (Abbreviation, Entity, Description, Human, Location, Numeric)
+    data = [(row['text'], row['label']) for row in dataset]
+    random.shuffle(data)
+    return data[:sample_size]
 
 # ==========================================
 # 3. TASK POOL ASSEMBLER
@@ -658,15 +664,15 @@ def build_master_task_pool():
     print("[*] Assembling Master Task Pool...")
     
     task_pool = {
-        "imdb_sentiment": {"weight": 0.10, "data": get_imdb_texts(10100), "prompts": PROMPT_ENSEMBLES["sentiment"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "ag_news": {"weight": 0.10, "data": get_agnews_texts(10100), "prompts": PROMPT_ENSEMBLES["topic_classification"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "glue_mnli": {"weight": 0.15, "data": get_mnli_texts(15100), "prompts": PROMPT_ENSEMBLES["nli_entailment"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "squad_qa": {"weight": 0.15, "data": get_squad_texts(15100), "prompts": PROMPT_ENSEMBLES["qa_extraction"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "emotion": {"weight": 0.10, "data": get_emotion_texts(10100), "prompts": PROMPT_ENSEMBLES["emotion"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "qqp_paraphrase": {"weight": 0.10, "data": get_qqp_texts(10100), "prompts": PROMPT_ENSEMBLES["paraphrase"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "cola_grammar": {"weight": 0.10, "data": get_cola_texts(10100), "prompts": PROMPT_ENSEMBLES["grammar"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "xsum_summary": {"weight": 0.10, "data": get_xsum_texts(10100), "prompts": PROMPT_ENSEMBLES["summarization"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
-        "trec_questions": {"weight": 0.10, "data": get_trec_texts(10100), "prompts": PROMPT_ENSEMBLES["question_class"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "imdb_sentiment": {"weight": 0.10, "data": get_imdb_data(10100), "prompts": PROMPT_ENSEMBLES["sentiment"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "ag_news": {"weight": 0.10, "data": get_agnews_data(10100), "prompts": PROMPT_ENSEMBLES["topic_classification"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "glue_mnli": {"weight": 0.15, "data": get_mnli_data(15100), "prompts": PROMPT_ENSEMBLES["nli_entailment"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "squad_qa": {"weight": 0.15, "data": get_squad_data(15100), "prompts": PROMPT_ENSEMBLES["qa_extraction"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "emotion": {"weight": 0.10, "data": get_emotion_data(10100), "prompts": PROMPT_ENSEMBLES["emotion"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "qqp_paraphrase": {"weight": 0.10, "data": get_qqp_data(10100), "prompts": PROMPT_ENSEMBLES["paraphrase"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "cola_grammar": {"weight": 0.10, "data": get_cola_data(10100), "prompts": PROMPT_ENSEMBLES["grammar"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "xsum_summary": {"weight": 0.10, "data": get_xsum_data(10100), "prompts": PROMPT_ENSEMBLES["summarization"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
+        "trec_questions": {"weight": 0.10, "data": get_trec_data(10100), "prompts": PROMPT_ENSEMBLES["question_class"], "neutral": PROMPT_ENSEMBLES["neutral_baseline"]},
     }
     
     print("[+] Task Pool Ready.")

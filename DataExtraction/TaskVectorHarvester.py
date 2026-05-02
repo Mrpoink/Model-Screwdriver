@@ -250,7 +250,7 @@ class Harvester:
         ## Forge matrices for ALL layers
         A_list, B_list = [], []
         
-        target_rank = 6
+        target_rank = 64
 
         for layer_idx in range(num_layers):
             all_x = torch.cat(self.radar_activations[layer_idx]['x'], dim=0)
@@ -342,6 +342,57 @@ class Harvester:
             calc_variance=False
         )
         return A_large[0], B_large[0]
+    
+    def extract_precision_targets(self, model, prompts, labels):
+        """
+        Groups activations by label and finds the Fisher Discriminant 
+        to tighten class boundaries. (LDA)
+        """
+        
+        # 1. Encode all prompts
+        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True).to(self.device)
+        
+        with torch.no_grad():
+            outputs = model(**inputs)
+            acts = outputs.pooler_output # Shape: (Batch, 1024)
+
+        labels = torch.tensor(labels, device=self.device)
+        X_pos = acts[labels == 1]
+        X_neg = acts[labels == 0]
+
+        # Safety fallback if a batch is unmixed
+        if len(X_pos) == 0 or len(X_neg) == 0:
+            return torch.zeros(acts.shape[-1], device=self.device)
+
+        # 2. Compute Means and Scatter Matrices
+        mu_pos, mu_neg = X_pos.mean(0), X_neg.mean(0)
+        
+        # S_B: Separation between centers
+        diff = (mu_pos - mu_neg).unsqueeze(-1)
+        
+        # Disable autocast specifically for the linear algebra to prevent the "Half" error
+        with torch.amp.autocast('cuda', enabled=False):
+            # Force everything to float32 explicitly here
+            diff = diff.to(torch.float32)
+            X_pos_f32 = X_pos.to(torch.float32)
+            X_neg_f32 = X_neg.to(torch.float32)
+            
+            S_B = torch.matmul(diff, diff.T)
+
+            # S_W: Internal cluster noise
+            # correction=0 prevents the "degrees of freedom" warning when a class has only 1 sample
+            S_W = torch.cov(X_pos_f32.T, correction=0) + torch.cov(X_neg_f32.T, correction=0)
+            
+            # Stabilization term to prevent Singular Matrix inversion errors
+            S_W += torch.eye(S_W.size(0), device=self.device) * 1e-5 
+
+            # 3. Solve Generalized Eigenvalue Problem: (S_W^-1 * S_B)
+            evals, evecs = torch.linalg.eig(torch.inverse(S_W) @ S_B)
+            T_lda = evecs[:, 0].real 
+            
+            # Normalize the vector to keep gradients stable
+            return T_lda / (torch.norm(T_lda) + 1e-8)
+    
     
     def extract_task_space_target(self, model, neutral_text, task_text):
         """

@@ -198,6 +198,7 @@ def evaluate_model(eval_task_config, screwdriver, large_model, small_model, harv
     return metrics
 
 def main():
+    print("Starting...")
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # These are the "Cousin" tasks. The Screwdriver never sees these during training.
@@ -255,7 +256,7 @@ def main():
     }
 
     ## Configuration
-    model_name = 13
+    model_name = 15
     eval_samples = 1000
     
     print(f"\n{'='*40}\nEXECUTING FULL PIPELINE: {model_name}\n{'='*40}")
@@ -264,7 +265,7 @@ def main():
     # --- 1. BUILD DATASET ---
     print(f"  [1/3] Building Dataset for {model_name}...")
     data_start = time.perf_counter()
-    BuildDatasetMain()
+    BuildDatasetMain(model_name=model_name)
     data_end = time.perf_counter()
     
     # Runs the entire pipeline 50 times to get as many samples as possible for evaluation
@@ -275,7 +276,7 @@ def main():
         # --- 2. TRAIN SCREWDRIVER ---
         print(f"\n  [2/3] Training Screwdriver for {model_name}...")
         train_start = time.perf_counter()
-        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=6)
+        iteration_metrics['avg_w'], iteration_metrics['avg_r'] = ScrewdriverTrainMain(model_name=model_name, target_rank=64)
         train_end = time.perf_counter()
         
         # Made for us to originally iterate through each rank and see the best, however we just default to 6 here
@@ -297,7 +298,7 @@ def main():
             large_model = BertModel.from_pretrained('bert-large-uncased').to(device).eval()
             harvester = Harvester(small_model, large_model, tokenizer, device=device)
             
-            screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=6, num_large_layers=24).to(device)
+            screwdriver = ModelScrewDriver(d_small=768, d_large=1024, d_prompt=768, target_rank=64, num_large_layers=24).to(device)
             weights_path = f"ModelScrewdriver_{model_name}.pth"
             
             # Catch file not found if training failed

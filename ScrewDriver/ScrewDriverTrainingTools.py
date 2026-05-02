@@ -108,3 +108,28 @@ class TrainingTools(nn.Module):
             
         # We drop the Cosine Loss entirely, as it causes gradient chaos at this scale.
         return stable_mse + 1e-6
+    
+    def _lda_alignment_loss(self, A_pred, T_lda):
+        """
+        Penalizes the generator if its weight shifts do not align with the 
+        class-separating Fisher Discriminant vector. Ignores zero-vectors.
+        """
+        B, L, R, D = A_pred.shape
+        T_expanded = T_lda.view(B, 1, 1, D).expand(B, L, R, D)
+        
+        A_flat = A_pred.reshape(-1, D)
+        T_flat = T_expanded.reshape(-1, D)
+        
+        cos_sim = F.cosine_similarity(A_flat, T_flat, dim=-1)
+        
+        # MASKING: Create a boolean mask where T_lda is NOT all zeros
+        # We check the sum of absolute values to bypass floating point errors
+        mask = (T_lda.abs().sum(dim=-1) > 1e-6).view(B, 1, 1).expand(B, L, R).reshape(-1)
+        
+        valid_cos_sim = cos_sim[mask]
+        
+        # If the entire batch is generative (SQuAD/XSum), return 0.0 loss
+        if valid_cos_sim.numel() == 0:
+            return torch.tensor(0.0, device=A_pred.device, requires_grad=True)
+            
+        return (1.0 - valid_cos_sim).mean()

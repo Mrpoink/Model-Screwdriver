@@ -6,6 +6,7 @@ import time
 from transformers import BertModel, BertTokenizer
 
 from DataExtraction.TaskVectorHarvester import Harvester # Fixed import to match your filename
+from DataExtraction.ModelWarmup import warm_up_teacher
 from DatasetBuildData import build_master_task_pool
 
 def main(model_name, num_total_samples=15000, shard_size=1500):
@@ -14,19 +15,7 @@ def main(model_name, num_total_samples=15000, shard_size=1500):
     
     # Robust folder reset
     if os.path.exists(f"master_dataset{model_name}"):
-        try:
-            shutil.rmtree(f"master_dataset{model_name}")
-            # Give Windows a moment to realize the folder is gone
-            time.sleep(0.5) 
-        except PermissionError:
-            print("[!] master_dataset is locked. Cleaning contents instead...")
-            for file in os.listdir(f"master_dataset{model_name}"):
-                file_path = os.path.join(f"master_dataset{model_name}", file)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
-                except Exception as e:
-                    print(f"      Could not delete {file}: {e}")
+        model_name += 1
     
     os.makedirs(f"master_dataset{model_name}", exist_ok=True)
     
@@ -54,7 +43,7 @@ def main(model_name, num_total_samples=15000, shard_size=1500):
             print(f"      Mapping Concept Circuit for: {task_name}")
             
             sample_texts = config["data"][:32]
-            sample_prompts = [config["prompts"][0] + " " + text for text in sample_texts]
+            sample_prompts = [config["prompts"][0] + " " + text for text, label in sample_texts]
             
             variance = harvester.causal_trace_variance(large_model, sample_prompts)
             task_variances[task_name] = variance.cpu()
@@ -81,7 +70,7 @@ def main(model_name, num_total_samples=15000, shard_size=1500):
                 continue 
 
             random_idx = random.randint(0, len(task_config["data"]) - 1)
-            text_sample = task_config["data"].pop(random_idx)
+            text_sample, text_label = task_config["data"].pop(random_idx)
 
             base_prompt = random.choice(task_config["neutral"])
             task_prompts_ensemble = task_config["prompts"]
@@ -93,6 +82,7 @@ def main(model_name, num_total_samples=15000, shard_size=1500):
             )
 
             active_prompt = random.choice(task_prompts_ensemble)
+            
             A_large_batch, B_large_batch, _ = harvester.extract_task_matrices(
                 large_model, 
                 [base_prompt + " " + text_sample], 
@@ -101,14 +91,34 @@ def main(model_name, num_total_samples=15000, shard_size=1500):
                 calc_variance=False 
             )
 
+            # NEW: Extract the boundary-tightening vector (LDA)
+            # If the task is generative (label == -1), skip LDA and return a zero vector
+            if text_label == -1:
+                T_lda = torch.zeros(1024, device=device) # d_large = 1024
+            else:
+                # We need a small batch of prompts with matching labels to find the discriminant
+                # For speed in this massive loop, we sample 4 random items of the SAME task
+                lda_sample_size = min(4, len(task_config["data"]))
+                lda_texts_labels = random.sample(task_config["data"], lda_sample_size)
+                
+                lda_prompts = [active_prompt + " " + txt for txt, lbl in lda_texts_labels]
+                lda_labels = [lbl for txt, lbl in lda_texts_labels]
+                
+                # Append our current sample so it's included in the calculation
+                lda_prompts.append(active_prompt + " " + text_sample)
+                lda_labels.append(text_label)
+                
+                T_lda = harvester.extract_precision_targets(large_model, lda_prompts, lda_labels)
+
             record = {
                 "task_type": chosen_task, 
-                "A_small": A_small[0].cpu().to(torch.float32), # Revert to f32 for storage/training compatibility
+                "A_small": A_small[0].cpu().to(torch.float32), 
                 "B_small": B_small[0].cpu().to(torch.float32),
                 "prompt_emb": random.choice(task_prompt_embs[chosen_task]).clone().to(torch.float32),
                 "A_large": A_large_batch[0].cpu().to(torch.float32),
                 "B_large": B_large_batch[0].cpu().to(torch.float32),
-                "target_variance": task_variances[chosen_task].clone().to(torch.float32)
+                "target_variance": task_variances[chosen_task].clone().to(torch.float32),
+                "T_lda": T_lda.cpu().to(torch.float32) # NEW LINE
             }
 
             current_shard.append(record)
